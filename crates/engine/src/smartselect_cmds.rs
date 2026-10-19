@@ -60,7 +60,7 @@ pub(crate) fn with_doc_sampler<R>(doc: &Document, layer: Option<LayerId>, all_la
 }
 
 /// Stores `region` combined with the current selection by `m` as one history step.
-fn apply(s: &mut Session, label: &str, region: Option<Region>, m: SelectionMode) -> Result<Value> {
+pub(crate) fn apply(s: &mut Session, label: &str, region: Option<Region>, m: SelectionMode) -> Result<Value> {
     if region.is_none() && matches!(m, SelectionMode::Add | SelectionMode::Subtract) {
         // Nothing found: leave the selection (and history) alone.
         let selected = s.active().ok_or(EngineError::NoDocument)?.doc.selection.is_some();

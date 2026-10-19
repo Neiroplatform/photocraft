@@ -10,6 +10,7 @@
 pub mod actions_cmds;
 pub mod adjust_cmds;
 pub mod adjust_params;
+pub mod ai_action_plan;
 pub mod align_cmds;
 pub mod analysis_cmds;
 pub mod artboard_cmds;
@@ -80,6 +81,7 @@ pub mod retouch_cmds;
 pub mod sample_cmds;
 pub mod select_extra_cmds;
 pub mod selection_cmds;
+pub mod semantic_select_cmds;
 pub mod slice_cmds;
 pub mod smart_cmds;
 pub mod smartselect_cmds;
@@ -323,6 +325,9 @@ pub struct Session {
     pub authorize: Option<fn(&str, &serde_json::Value) -> Result<()>>,
     /// Background jobs (see [`jobs`]).
     jobs: jobs::Jobs,
+    /// Revision-bound semantic masks waiting for explicit Apply/Cancel. These
+    /// are view proposals, not document state or history.
+    semantic_proposals: semantic_select_cmds::ProposalStore,
 }
 
 /// Move item `i` of `v` to position `to`, clamped to the end. Returns where it went; `None` when
@@ -396,6 +401,7 @@ impl Session {
         smart_cmds::on_close(self, index);
         if let Some(id) = self.docs.get(index).map(|d| d.doc.id) {
             self.cancel_jobs_on(id);
+            self.semantic_proposals.remove_document(id);
         }
         let d = self.docs.remove(index);
         self.active = if self.docs.is_empty() {

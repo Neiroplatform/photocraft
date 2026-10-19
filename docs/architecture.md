@@ -125,7 +125,7 @@ photocraft/
 └─ plan/                       this directory
 ```
 
-**What exists today.** This layout is the target design. Built so far: `geom`, `cms`, `color`, `raster`, `psd`, `codecs`, `doc`, `ops`, `algo`, `paint`, `text`, `vector`, `compose`, `gpu`, `format`, `raw`, `io`, `plugins`, `engine`, `ui-egui`, `automation`, `testkit`, and the three apps. Not yet split out: `viewport` and `tools` live inside `ui-egui` and `engine`; `platform` services are function hooks injected by each app (`ui_egui::Services`); `adobe-assets` and `ml` are not started.
+**What exists today.** This layout is the target design. Built so far: `geom`, `cms`, `color`, `raster`, `psd`, `codecs`, `doc`, `ops`, `algo`, `paint`, `text`, `vector`, `compose`, `gpu`, `format`, `raw`, `io`, `ml`, `plugins`, `engine`, `ui-egui`, `automation`, `testkit`, and the three apps. Not yet split out: `viewport` and `tools` live inside `ui-egui` and `engine`; `platform` services are function hooks injected by each app (`ui_egui::Services`); `adobe-assets` is not started. The first `ml` backend is a bounded MobileSAM TinyViT implementation for point-prompted browser object selection; broader task registry/backends remain future work.
 
 **Crate granularity:** start with the crates above. Split `algo` into `-adjust`, `-filters`, `-select`, `-inpaint` and `-warp` once any module passes about 10k lines, or once compile times hurt. Its internal module boundaries should already follow those lines.
 
@@ -401,7 +401,7 @@ psd/src/
 | Paint (`paint`) | dab generation (hardness, roundness, angle, spacing, scatter), dynamics from pressure/tilt/velocity, smoothing (pulled string / lazy mouse), wet edges, airbrush, eraser, clone/heal sources, blend modes per stroke, `.abr` import | CPU first, GPU later |
 | Text (`text`) | font DB trait (system fonts native, bundled fonts on web), parley layout, per-run styles, paragraph options, warp; renders to a raster cache | — |
 | Vector (`vector`) | shapes, bezier paths, pen tool geometry, strokes (dash, align, caps), boolean ops → coverage via vello_cpu | — |
-| ML (`ml`) | `InferenceBackend` trait; tasks: `segment_point/box` (SAM2), `matte_subject` (background removal), `depth`, `sky`; model registry with SHA-256 verification and on-demand download | backend-dependent |
+| ML (`ml`) | Bounded, versioned point-prompt segmentation requests; MobileSAM TinyViT through Candle; immutable model identity; deterministic connected-component and small-hole cleanup. Future tasks: box prompts, matting, depth and sky. | Candle CPU/WASM worker first |
 
 **Rules for every algorithm:**
 - **Signature:** a pure function `fn(input: &SurfaceView, params: &P, region: Rect, cancel: &CancelToken) -> Surface`.
@@ -430,6 +430,27 @@ psd/src/
   - `FileSystem` (native fs / web File System Access / in-memory for tests)
   - `Clipboard`, `FontSource`, `ModelStore`
   - `Clock`, `Notifier`
+
+### 11.1 Browser semantic-selection boundary
+
+The browser starts a dedicated Rust/WASM worker as soon as the editor shell starts. Trunk and
+wasm-bindgen generate both the loader and module glue; no handwritten JavaScript owns inference.
+The worker fetches five static MobileSAM weight shards, verifies their combined size and SHA-256,
+then keeps the model and the bounded RGB preview outside the UI thread. While loading it accepts at
+most four queued requests. Requests are limited to 1024 × 1024 RGB and 64 prompt points.
+
+Worker replies are untrusted proposals rather than document mutations. `engine` binds each
+proposal to the exact document id, revision, source layer and canvas aspect. Apply consumes the
+proposal through `select.semantic.apply` as an ordinary history transaction; stale, malformed or
+already-consumed proposals fail closed. Cancel discards the proposal and does not change revision
+or history. Plain click replaces the selection, Shift adds, Alt subtracts and Shift+Alt intersects.
+
+The local prompt harness is deliberately a closed, versioned `ActionPlan`, not arbitrary model
+tool execution. Supported Russian/English intents map to allowlisted commands (remove background,
+blur background, copy selection). The plan is validated against the same document revision before
+execution. Automatic subject selection seeds several spatially separated foreground points inside
+a classic foreground proposal, refines with MobileSAM, and coalesces selection plus edit into one
+undo step. Unknown or overlong prompts fail without changing the document.
 
 ---
 

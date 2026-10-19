@@ -8,6 +8,9 @@ static site in `photocraft-web-<version>/`:
 | `index.html` | The page. It loads everything through relative URLs. |
 | `photocraft-web-<hash>.js` | wasm-bindgen glue (generated, ES module) |
 | `photocraft-web-<hash>_bg.wasm` | The app: about 19 MiB raw, 8 MiB with gzip, 5.6 MiB with Brotli (see [Sizes](#sizes)) |
+| `photocraft-ml-worker_loader.js`, `photocraft-ml-worker.js`, `photocraft-ml-worker_bg.wasm` | Generated loader/glue and isolated Rust/WASM MobileSAM inference worker |
+| `models/mobile-sam-tiny-vitt.safetensors.part-*` | Five verified static model shards, loaded immediately after editor startup |
+| `LICENSE-APACHE`, `NOTICE`, `ATTRIBUTION.md` | Model/runtime licence and provenance notices |
 | `_headers`, `.htaccess` | Sample header rules for Netlify/Cloudflare Pages and Apache |
 | `fonts/` (optional) | Fonts loaded on demand, listed in `fonts/manifest.txt` (see [Fonts](#fonts)) |
 
@@ -64,13 +67,14 @@ location /photocraft/ {
 }
 ```
 
-The editor and image processing run on the visitor's device. Open uses the browser file
+The editor and image processing, including object segmentation, run on the visitor's device. Open uses the browser file
 picker; Save and Export download files. Preferences use browser localStorage. There is no
 server-side document storage, desktop TCP control server, or web autosave/crash recovery;
 save/download work before closing or reloading the page. A browser with WebGPU or WebGL2 is
 required; `?webgl` forces the fallback when troubleshooting.
 
-To verify the browser deployment, open the page, open an image and save/export it.
+To verify the browser deployment, open the page and confirm all five model shards start loading,
+open an image, click a foreground object with Object Select, apply the selection, and save/export it.
 
 ## Sizes
 
@@ -104,7 +108,7 @@ hash, so they can be cached forever. Only `index.html` needs revalidation.
   download from about 19 MiB to about 8 MiB (gzip) or 5.6 MiB (Brotli). You can also
   precompress (`brotli -k *.wasm`) and let the server send `Content-Encoding: br`.
 - **Caching:** `Cache-Control: public, max-age=31536000, immutable` on the hashed `.wasm` and
-  `.js` files, and `no-cache` on `index.html`.
+  `.js` files and the immutable, SHA-256-pinned model shards; `no-cache` on `index.html`.
 - **HTTPS:** WebGPU (and the clipboard) only work in a secure context, which means `https://`
   or `http://localhost`. Over plain HTTP elsewhere, the app falls back to WebGL2.
 - **No special isolation headers:** PhotoCraft doesn't use `SharedArrayBuffer`, so it doesn't

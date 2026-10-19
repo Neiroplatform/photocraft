@@ -1,2 +1,7 @@
 [alias]
 xtask = "run -p xtask --"
+
+[target.wasm32-unknown-unknown]
+# Candle's CPU backend uses rand internally. Select getrandom's browser backend
+# explicitly; the feature alone intentionally does not choose a wasm host.
+rustflags = ["-C", "target-feature=+simd128", "--cfg", 'getrandom_backend="wasm_js"']

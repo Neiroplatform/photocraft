@@ -19,6 +19,7 @@ pub mod adjust_dialog;
 pub mod adjust_editors;
 pub mod adjust_preview;
 pub mod adjust_ui;
+pub mod ai_edit_ui;
 pub mod analysis_ui;
 pub mod artboard_ui;
 pub(crate) mod blend_preview;
@@ -120,6 +121,7 @@ pub mod rotate_view;
 pub mod rulers;
 pub mod screen_picker;
 pub mod scrollbars;
+pub mod semantic_select_ui;
 pub mod served_fonts;
 pub mod shortcut_dispatch;
 pub mod shortcuts;
@@ -252,6 +254,10 @@ pub type CursorPosFn = Box<dyn FnMut(&egui::Context) -> Option<egui::Pos2>>;
 pub struct Services {
     /// User-initiated desktop/browser pixel sampling.
     pub screen_pick: Option<screen_picker::Service>,
+    /// Local semantic object segmentation. The web shell begins loading the
+    /// immutable model as soon as the editor starts; tests and other shells can
+    /// inject the same typed boundary without giving UI code model ownership.
+    pub semantic_select: Option<semantic_select_ui::Service>,
     /// Decode a file's bytes into a document (PSD, PNG, JPEG, …).
     pub import: Option<ImportFn>,
     /// Encode a document for a file name (format chosen by extension).
@@ -328,6 +334,9 @@ pub struct PhotocraftApp {
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
+    /// Inference reply waiting outside the UI thread, bound to the document
+    /// revision that produced its preview.
+    pub(crate) semantic_select_pending: Option<semantic_select_ui::Pending>,
     /// Canvas caches per (document, display): CPU textures hold monitor values; the GPU
     /// canvas state is shared (`canvas::GPU_OUTPUT`).
     canvases: HashMap<(DocId, u32), canvas::CanvasCache>,
@@ -515,6 +524,7 @@ impl PhotocraftApp {
             session,
             ui: UiState::default(),
             services,
+            semantic_select_pending: None,
             canvases: HashMap::new(),
             navigator_textures: HashMap::new(),
             monitors: Default::default(),
@@ -1077,6 +1087,7 @@ impl eframe::App for PhotocraftApp {
         }
         self.last_frame_time = now;
         self.sync_views();
+        semantic_select_ui::poll(self);
         self.check_gpu(ctx);
         #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
         if self.live_tokens.poll(ctx, self.ui.theme) {

@@ -18,6 +18,48 @@ fi
 
 SITE="$ROOT/dist/web"
 [ -f "$SITE/index.html" ] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
+
+# MobileSAM is a runtime asset, not embedded in the UI wasm. Pin and verify the
+# exact candidate, then shard it below common 25 MiB CDN per-file limits.
+MODEL_REV="8b4cb7c743f3b3cb8afd212a86ae15b1bbfdac97"
+MODEL_SHA="5ad43a841b57cc798e2837e251c15aa9f602868a1780d195459383d117784cf7"
+OFFICIAL_REV="f706ad9c4eb7f219c00d9050e46328518ffb65d2"
+OFFICIAL_SHA="6dbb90523a35330fedd7f1d3dfc66f995213d81b29a5ca8108dbcdd4e37d6c2f"
+MODEL_CACHE="$CARGO_TARGET_DIR/mobile_sam-tiny-vitt-$MODEL_REV.safetensors"
+OFFICIAL_CACHE="$CARGO_TARGET_DIR/mobile_sam-$OFFICIAL_REV.pt"
+if [ ! -f "$MODEL_CACHE" ]; then
+  curl -fL --retry 3 -o "$MODEL_CACHE.tmp" "https://huggingface.co/lmz/candle-sam/resolve/$MODEL_REV/mobile_sam-tiny-vitt.safetensors"
+  mv "$MODEL_CACHE.tmp" "$MODEL_CACHE"
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_model_sha=$(sha256sum "$MODEL_CACHE" | awk '{print $1}')
+else
+  actual_model_sha=$(shasum -a 256 "$MODEL_CACHE" | awk '{print $1}')
+fi
+[ "$actual_model_sha" = "$MODEL_SHA" ] || { echo "error: MobileSAM SHA-256 $actual_model_sha does not match $MODEL_SHA" >&2; exit 1; }
+if [ ! -f "$OFFICIAL_CACHE" ]; then
+  curl -fL --retry 3 -o "$OFFICIAL_CACHE.tmp" "https://raw.githubusercontent.com/ChaoningZhang/MobileSAM/$OFFICIAL_REV/weights/mobile_sam.pt"
+  mv "$OFFICIAL_CACHE.tmp" "$OFFICIAL_CACHE"
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_official_sha=$(sha256sum "$OFFICIAL_CACHE" | awk '{print $1}')
+else
+  actual_official_sha=$(shasum -a 256 "$OFFICIAL_CACHE" | awk '{print $1}')
+fi
+[ "$actual_official_sha" = "$OFFICIAL_SHA" ] \
+  || { echo "error: official MobileSAM SHA-256 $actual_official_sha does not match $OFFICIAL_SHA" >&2; exit 1; }
+# The mirror has no independent model card. Prove that every tensor in the
+# browser conversion exactly matches the pinned Apache-2.0 official checkpoint.
+PHOTOCRAFT_OFFICIAL_MOBILE_SAM_PT="$OFFICIAL_CACHE" PHOTOCRAFT_MOBILE_SAM_WEIGHTS="$MODEL_CACHE" \
+  cargo test -p photocraft-ml --features mobile-sam --test model_provenance -- --ignored
+mkdir -p "$SITE/models"
+rm -f "$SITE/models/mobile-sam-tiny-vitt.safetensors.part-"*
+split -b 8388608 "$MODEL_CACHE" "$SITE/models/mobile-sam-tiny-vitt.safetensors.part-"
+[ "$(find "$SITE/models" -type f -name 'mobile-sam-tiny-vitt.safetensors.part-*' | wc -l | tr -d ' ')" = 5 ] \
+  || { echo "error: MobileSAM did not split into the expected five parts" >&2; exit 1; }
+# Served and archive users receive the model's source, licence and exact
+# provenance alongside the runtime asset.
+cp "$ROOT/NOTICE" "$ROOT/ATTRIBUTION.md" "$ROOT/LICENSE-APACHE" "$SITE/"
 # Paths must be relative so the site works under any prefix (public_url = "./" in Trunk.toml).
 if grep -Eq '(src|href)="/[^/]' "$SITE/index.html"; then
   echo "error: $SITE/index.html has root-absolute URLs; it would break when served from a sub-path" >&2

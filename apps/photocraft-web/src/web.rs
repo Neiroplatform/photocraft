@@ -1,7 +1,7 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use photocraft_codecs::{ChannelLayout, EncodeOptions, Image};
@@ -70,7 +70,8 @@ pub fn start() {
                     let inbox: Inbox = Arc::default();
                     let served: Served = Arc::default();
                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
-                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone()));
+                    let semantic = preload_semantic_model(cc.egui_ctx.clone());
+                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), semantic));
                     listen_pen(&pen_target, app.stylus.feed.clone());
                     app.set_theme(&cc.egui_ctx, ThemeKind::Pro);
                     if let Some(rs) = cc.wgpu_render_state.clone()
@@ -185,6 +186,67 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(js_sys::Uint8Array::new(&body).to_vec())
 }
 
+/// Start the dedicated inference worker when the editor starts. Trunk creates
+/// this stable loader from wasm-bindgen output; no handwritten JavaScript or
+/// model code runs in the document/UI realm.
+fn preload_semantic_model(ctx: egui::Context) -> Option<photocraft_ui_egui::semantic_select_ui::Service> {
+    use std::sync::mpsc;
+    use wasm_bindgen::closure::Closure;
+
+    let worker = match web_sys::Worker::new("./photocraft-ml-worker_loader.js") {
+        Ok(worker) => worker,
+        Err(error) => {
+            log::error!("photocraft-web: could not start local object worker: {error:?}");
+            return None;
+        }
+    };
+    let pending = Arc::new(Mutex::new(HashMap::<u64, mpsc::Sender<Result<photocraft_ml::SegmentationMask, String>>>::new()));
+    let replies = pending.clone();
+    let wake = ctx.clone();
+    let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
+        let parsed = serde_wasm_bindgen::from_value::<photocraft_ml::WorkerResponse>(event.data());
+        match parsed {
+            Ok(response) if response.version == photocraft_ml::WORKER_PROTOCOL_VERSION => {
+                if let Some(sender) = replies.lock().unwrap_or_else(|error| error.into_inner()).remove(&response.id) {
+                    let _ = sender.send(response.result);
+                }
+            }
+            Ok(response) => log::error!("photocraft-web: worker protocol {} is unsupported", response.version),
+            Err(error) => log::error!("photocraft-web: invalid worker response: {error}"),
+        }
+        wake.request_repaint();
+    });
+    worker.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    on_message.forget();
+
+    let failures = pending.clone();
+    let wake = ctx;
+    let on_error = Closure::<dyn FnMut(web_sys::ErrorEvent)>::new(move |event: web_sys::ErrorEvent| {
+        let message = format!("The local object worker failed: {}", event.message());
+        for (_, sender) in failures.lock().unwrap_or_else(|error| error.into_inner()).drain() {
+            let _ = sender.send(Err(message.clone()));
+        }
+        wake.request_repaint();
+    });
+    worker.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+    on_error.forget();
+
+    let next = AtomicU64::new(0);
+    Some(Box::new(move |input| {
+        input.borrowed().validate().map_err(|error| error.to_string())?;
+        let id = next.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+        let request = photocraft_ml::WorkerRequest { version: photocraft_ml::WORKER_PROTOCOL_VERSION, id, input };
+        let value = serde_wasm_bindgen::to_value(&request).map_err(|error| error.to_string())?;
+        let (sender, receiver) = mpsc::channel();
+        pending.lock().unwrap_or_else(|error| error.into_inner()).insert(id, sender);
+        if let Err(error) = worker.post_message(&value) {
+            pending.lock().unwrap_or_else(|poison| poison.into_inner()).remove(&id);
+            return Err(format!("Could not send object selection to the worker: {error:?}"));
+        }
+        Ok(receiver)
+    }))
+}
+
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
 /// so the app's own drop path can't handle them) and feed them through the inbox.
 struct WebShell {
@@ -256,9 +318,10 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox) -> Services {
+fn services(inbox: Inbox, semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>) -> Services {
     Services {
         screen_pick: screen_color_service(),
+        semantic_select,
         import: Some(Box::new(|name: &str, bytes: &[u8]| photocraft_io::import(name, bytes).map(|r| (r.document, r.warnings)).map_err(|e| e.to_string()))),
         export: Some(Box::new(|doc: &Document, path: &str, settings: &photocraft_ui_egui::ExportSettings| {
             let mut opts = photocraft_io::ExportOptions::default();

@@ -208,14 +208,14 @@ pub fn finish_object_selection(app: &mut PhotocraftApp, start: [f64; 2], end: [f
     let (x, y) = (start[0].min(end[0]), start[1].min(end[1]));
     let (w, h) = ((end[0] - start[0]).abs(), (end[1] - start[1]).abs());
     if w < 2.0 || h < 2.0 {
+        let _ = crate::semantic_select_ui::select_at(app, end, mods);
         return;
     }
-    let mode = if mods.alt {
-        "subtract"
-    } else if mods.shift {
-        "add"
-    } else {
-        "replace"
+    let mode = match (mods.shift, mods.alt) {
+        (true, true) => "intersect",
+        (true, false) => "add",
+        (false, true) => "subtract",
+        (false, false) => "replace",
     };
     let _ = app.run(
         "select.object",
@@ -361,10 +361,21 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
         }
         Tool::ObjectSelection => {
             crate::widgets::checkbox(ui, &mut o.sample_all_layers, tl!("Sample All Layers"));
-            opt(ui, tl!("Drag a rectangle around the object"));
+            opt(ui, tl!("Click an object (local AI), or drag a rectangle"));
             crate::widgets::vline(ui, 22.0);
-            if crate::widgets::secondary_button(ui, tl!("Select Subject"), 0.0).clicked() {
+            if crate::semantic_select_ui::is_pending(app) {
+                if crate::widgets::secondary_button(ui, tl!("Cancel"), 0.0).clicked() {
+                    crate::semantic_select_ui::cancel(app);
+                }
+            } else if crate::widgets::secondary_button(ui, tl!("Select Subject"), 0.0).clicked() {
                 let _ = app.run("select.subject", json!({}));
+            }
+            crate::widgets::vline(ui, 22.0);
+            let response = ui.add_sized([220.0, 24.0], egui::TextEdit::singleline(&mut app.ui.ai_prompt).hint_text(tl!("Describe an edit…")));
+            let submit = crate::widgets::secondary_button(ui, tl!("Run AI edit"), 0.0).clicked()
+                || (response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)));
+            if submit && !crate::semantic_select_ui::is_pending(app) {
+                crate::ai_edit_ui::run_prompt(app);
             }
         }
         Tool::RedEye => {

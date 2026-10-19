@@ -39,12 +39,28 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
     let id = layer_param(s, p)?;
     let doc = &s.active().ok_or(EngineError::NoDocument)?.doc;
     check(doc, doc.layer(id).ok_or(EngineError::NoLayer(id))?).map_err(EngineError::Other)?;
+    let use_selection = p.get("useSelection").and_then(Value::as_bool).unwrap_or(false);
+    if use_selection && doc.selection.is_none() {
+        return Err(EngineError::Other("Remove Background needs an active selection when `useSelection` is true".into()));
+    }
     let sample_all = p.get("sampleAllLayers").and_then(Value::as_bool).unwrap_or(false);
     let refine = p.get("refine").and_then(Value::as_bool).unwrap_or(true);
     crate::jobs::edit_job(
         s,
         "Remove Background",
         move |doc, _, ctx| {
+            if use_selection {
+                let selection =
+                    doc.selection.clone().ok_or_else(|| EngineError::Other("the selection changed before Remove Background could apply it".into()))?;
+                let bounds = selection.content_bounds();
+                if bounds.is_empty() {
+                    return Err(EngineError::Other("the active selection is empty".into()));
+                }
+                crate::extra_cmds::background_to_layer_for_mask(doc, id);
+                doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?.mask = Some(LayerMask { surface: selection, ..LayerMask::reveal_all() });
+                doc.selection = None;
+                return Ok([bounds.x0, bounds.y0, bounds.width() as i32, bounds.height() as i32]);
+            }
             ctx.progress(0.1, "Finding subject");
             let found = with_doc_sampler(doc, Some(id), sample_all, |smp, d| subject::select_subject(smp, d.bounds()));
             let mut region = found.ok_or_else(|| EngineError::Other("no subject found".into()))?;
@@ -78,7 +94,7 @@ pub fn specs() -> Vec<CommandSpec> {
         label: "Remove Background",
         menu: &[],
         shortcut: None,
-        params: r##"{"layer":id?,"sampleAllLayers":bool=false,"refine":bool=true} → {layer,bounds} (adds a layer mask from Select Subject; the Background becomes a normal layer)"##,
+        params: r##"{"layer":id?,"sampleAllLayers":bool=false,"refine":bool=true,"useSelection":bool=false} → {layer,bounds} (adds a layer mask from Select Subject, or from the exact active selection when useSelection=true; the Background becomes a normal layer)"##,
         enabled,
         run,
         journal: true,
@@ -198,6 +214,34 @@ mod tests {
         assert_eq!(l.name, "Layer 0");
         assert!(!l.locks.transparency && !l.locks.position);
         assert!(l.mask.is_some());
+    }
+
+    #[test]
+    fn remove_background_can_apply_the_exact_active_selection_in_one_undo_step() {
+        let (mut s, _) = disc(8);
+        let id = active_id(&s);
+        s.execute("select.rect", json!({"x": 20, "y": 30, "width": 40, "height": 50})).unwrap();
+        let chosen = s.active().unwrap().doc.selection.clone().unwrap();
+        let steps = s.active().unwrap().history.past_len();
+
+        let result = s.execute(CMD, json!({"useSelection": true})).unwrap();
+
+        assert_eq!(result["bounds"], json!([20, 30, 40, 50]));
+        assert_eq!(s.active().unwrap().history.past_len(), steps + 1);
+        assert!(s.active().unwrap().doc.selection.is_none());
+        assert_eq!(layer(&s, id).mask.as_ref().map(|mask| &mask.surface), Some(&chosen));
+        s.execute("edit.undo", json!({})).unwrap();
+        assert!(layer(&s, id).mask.is_none());
+        assert!(s.active().unwrap().doc.selection.is_some(), "undo restores the selection consumed by the quick action");
+    }
+
+    #[test]
+    fn remove_background_selection_mode_fails_closed_without_a_selection() {
+        let (mut s, _) = disc(8);
+        let before = s.active().unwrap().revision;
+        assert!(s.execute(CMD, json!({"useSelection": true})).is_err());
+        assert_eq!(s.active().unwrap().revision, before);
+        assert!(layer(&s, active_id(&s)).mask.is_none());
     }
 
     #[test]

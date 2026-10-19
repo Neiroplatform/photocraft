@@ -936,6 +936,9 @@ pub struct UiState {
     pub next_id: u64,
     /// Last status message (errors from commands, hints).
     pub status: String,
+    /// Local AI edit prompt shown in Object Selection's contextual options.
+    #[serde(default)]
+    pub ai_prompt: String,
     /// The status message is an error (shown in the warning colour).
     #[serde(default)]
     pub status_error: bool,
@@ -1013,6 +1016,7 @@ impl Default for UiState {
             crop_angle: 0.0,
             next_id: 1,
             status: String::new(),
+            ai_prompt: String::new(),
             status_error: false,
             notices: Vec::new(),
             gpu_fallback_notice: None,

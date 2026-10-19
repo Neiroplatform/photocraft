@@ -1,0 +1,27 @@
+[package]
+name = "photocraft-ml"
+description = "Bounded, UI-independent local inference contracts for PhotoCraft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+mobile-sam = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:sha2"]
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { version = "1.8", default-features = false, features = ["pure"] }
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+sha2 = { version = "0.10", default-features = false, optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Enables the explicitly selected browser backend from `.cargo/config.toml` for
+# Candle's transitive rand/getrandom use.
+getrandom = { workspace = true }

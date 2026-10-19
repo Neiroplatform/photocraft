@@ -81,7 +81,9 @@ fn main() {
         .expect("an application-defined event")
     };
 
-    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), photocraft_ui_egui::Services::default());
+    let mut session = photocraft_engine::Session::new();
+    session.prefs.edit(|prefs| prefs.interface.language = "en".into());
+    let mut app = PhotocraftApp::new(session, photocraft_ui_egui::Services::default());
     let ctx = egui::Context::default();
     let frame = |app: &mut PhotocraftApp, raw: egui::RawInput| {
         let mut out = ctx.run_ui(raw, |ui| {
