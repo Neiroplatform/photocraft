@@ -12,9 +12,20 @@
 //! - dropped files are read asynchronously by `web::WebShell` and delivered through the inbox.
 //!
 //! URL query flags: `?cpu` forces the CPU canvas path (same as `PHOTOCRAFT_CPU_CANVAS=1`);
-//! `?webgl` forces the WebGL2 backend instead of WebGPU.
+//! `?webgl` forces the WebGL2 backend instead of WebGPU, while `?webgpu` overrides the
+//! automatic Firefox WebGL2 compatibility path.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn query_flag(query: &str, flag: &str) -> bool {
+    query.trim_start_matches('?').split('&').any(|part| part.split_once('=').map_or(part, |(name, _)| name) == flag)
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn use_webgl(query: &str, user_agent: &str) -> bool {
+    query_flag(query, "webgl") || (!query_flag(query, "webgpu") && user_agent.contains("Firefox/"))
+}
 
 #[cfg(target_arch = "wasm32")]
 mod web;
@@ -31,6 +42,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::{query_flag, use_webgl};
+
     /// A WebAssembly module that never downloads (or doesn't match the page) runs no Rust, so the
     /// page itself replaces the endless "Loading" with what may have gone wrong and a way to
     /// retry, without a hand-written script.
@@ -41,5 +54,22 @@ mod tests {
         assert!(hint.contains("failed to") && hint.contains("<a href=\"\">Reload</a>"), "{hint}");
         assert!(html.contains("animation: photocraft-stalled"), "the hint appears after a delay");
         assert!(!html.contains("<script"), "trunk injects the generated loader; the page has no script of its own");
+    }
+
+    #[test]
+    fn firefox_uses_the_stable_webgl_backend_unless_webgpu_is_explicit() {
+        let firefox = "Mozilla/5.0 Gecko/20100101 Firefox/145.0";
+        assert!(use_webgl("", firefox));
+        assert!(use_webgl("?cpu", firefox));
+        assert!(!use_webgl("?webgpu", firefox));
+        assert!(use_webgl("?webgpu&webgl", firefox));
+        assert!(!use_webgl("", "Mozilla/5.0 Chrome/145.0"));
+    }
+
+    #[test]
+    fn backend_flags_match_complete_query_parameter_names() {
+        assert!(query_flag("?webgl", "webgl"));
+        assert!(query_flag("?mode=edit&webgl=1", "webgl"));
+        assert!(!query_flag("?notwebgl=1", "webgl"));
     }
 }

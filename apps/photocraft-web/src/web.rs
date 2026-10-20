@@ -52,10 +52,11 @@ pub fn start() {
             return;
         };
         let q = query();
-        let force_cpu = q.contains("cpu");
+        let force_cpu = crate::query_flag(&q, "cpu");
+        let user_agent = web_sys::window().and_then(|window| window.navigator().user_agent().ok()).unwrap_or_default();
         let mut options = eframe::WebOptions::default();
         photocraft_ui_egui::gpu_canvas::use_adapter_limits(&mut options.wgpu_options.wgpu_setup);
-        if q.contains("webgl")
+        if crate::use_webgl(&q, &user_agent)
             && let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup
         {
             create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
