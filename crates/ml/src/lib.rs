@@ -47,6 +47,16 @@ pub struct PromptPoint {
     pub kind: PointKind,
 }
 
+/// Defines how the backend interprets multiple prompt points. Keeping this
+/// explicit preserves ordinary joint SAM refinement while allowing the
+/// automatic subject path to evaluate independent class-agnostic probes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SegmentationMode {
+    PromptPoints,
+    AutomaticSubject,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelIdentity {
     pub family: String,
@@ -69,6 +79,7 @@ pub struct SegmentationRequest<'a> {
     /// Packed row-major RGB8, exactly `width * height * 3` bytes.
     pub rgb: &'a [u8],
     pub points: &'a [PromptPoint],
+    pub mode: SegmentationMode,
 }
 
 /// Owned form used at asynchronous native/browser worker boundaries.
@@ -78,11 +89,12 @@ pub struct SegmentationInput {
     pub height: u32,
     pub rgb: Vec<u8>,
     pub points: Vec<PromptPoint>,
+    pub mode: SegmentationMode,
 }
 
 impl SegmentationInput {
     pub fn borrowed(&self) -> SegmentationRequest<'_> {
-        SegmentationRequest { width: self.width, height: self.height, rgb: &self.rgb, points: &self.points }
+        SegmentationRequest { width: self.width, height: self.height, rgb: &self.rgb, points: &self.points, mode: self.mode }
     }
 }
 
@@ -101,7 +113,7 @@ pub struct WorkerResponse {
     pub result: Result<SegmentationMask, String>,
 }
 
-pub const WORKER_PROTOCOL_VERSION: u8 = 1;
+pub const WORKER_PROTOCOL_VERSION: u8 = 2;
 
 impl SegmentationRequest<'_> {
     pub fn validate(&self) -> Result<(), MlError> {
@@ -127,6 +139,9 @@ impl SegmentationRequest<'_> {
         }
         if self.points.iter().any(|p| !p.x.is_finite() || !p.y.is_finite() || !(0.0..=1.0).contains(&p.x) || !(0.0..=1.0).contains(&p.y)) {
             return Err(MlError::InvalidRequest("prompt coordinates must be finite and normalized".into()));
+        }
+        if self.mode == SegmentationMode::AutomaticSubject && (self.points.len() < 2 || self.points.iter().any(|point| point.kind != PointKind::Foreground)) {
+            return Err(MlError::InvalidRequest("automatic subject discovery requires at least two foreground probes".into()));
         }
         Ok(())
     }
@@ -188,7 +203,7 @@ mod tests {
     #[test]
     fn request_accepts_exact_rgb_and_normalized_point() {
         let rgb = [0; 2 * 3 * 3];
-        assert!(SegmentationRequest { width: 2, height: 3, rgb: &rgb, points: &[point()] }.validate().is_ok());
+        assert!(SegmentationRequest { width: 2, height: 3, rgb: &rgb, points: &[point()], mode: SegmentationMode::PromptPoints }.validate().is_ok());
     }
 
     #[test]
@@ -196,14 +211,32 @@ mod tests {
         let p = point();
         let bad = PromptPoint { x: f32::NAN, ..p };
         let cases = [
-            SegmentationRequest { width: 0, height: 1, rgb: &[], points: &[p] },
-            SegmentationRequest { width: MAX_PREVIEW_SIDE + 1, height: 1, rgb: &[], points: &[p] },
-            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0], points: &[p] },
-            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0, 0], points: &[bad] },
-            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0, 0], points: &[] },
+            SegmentationRequest { width: 0, height: 1, rgb: &[], points: &[p], mode: SegmentationMode::PromptPoints },
+            SegmentationRequest { width: MAX_PREVIEW_SIDE + 1, height: 1, rgb: &[], points: &[p], mode: SegmentationMode::PromptPoints },
+            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0], points: &[p], mode: SegmentationMode::PromptPoints },
+            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0, 0], points: &[bad], mode: SegmentationMode::PromptPoints },
+            SegmentationRequest { width: 1, height: 1, rgb: &[0, 0, 0], points: &[], mode: SegmentationMode::PromptPoints },
         ];
         for request in cases {
             assert!(matches!(request.validate(), Err(MlError::InvalidRequest(_))));
+        }
+    }
+
+    #[test]
+    fn automatic_subject_mode_is_explicit_and_requires_foreground_probes() {
+        let rgb = [0; 3];
+        let foreground = point();
+        let background = PromptPoint { kind: PointKind::Background, ..foreground };
+        assert!(
+            SegmentationRequest { width: 1, height: 1, rgb: &rgb, points: &[foreground, foreground], mode: SegmentationMode::AutomaticSubject }
+                .validate()
+                .is_ok()
+        );
+        for points in [&[foreground][..], &[foreground, background][..]] {
+            assert!(matches!(
+                SegmentationRequest { width: 1, height: 1, rgb: &rgb, points, mode: SegmentationMode::AutomaticSubject }.validate(),
+                Err(MlError::InvalidRequest(_))
+            ));
         }
     }
 

@@ -10,6 +10,7 @@ mod ico;
 mod layers;
 mod perf;
 mod pinned;
+mod sbom;
 mod scorecard;
 mod sha256;
 mod stats;
@@ -42,6 +43,7 @@ commands:
                   check perf/budgets.toml and perf/baseline.json (non-zero on a broken budget or regression)
   scorecard [--check]
                   regenerate docs/scorecard.md (--check: fail if it is stale)
+  sbom [--check]  regenerate the deterministic CycloneDX source SBOM for the web release
   version [set X.Y.Z[-pre]]
                   print the workspace version, or set it (Cargo.toml + Cargo.lock)
   ico <out.ico> <in.png>...
@@ -62,6 +64,7 @@ fn main() -> ExitCode {
         Some("i18n-coverage") => i18n_coverage::run(&root()),
         Some("perf") => perf::run(&root(), &rest),
         Some("scorecard") => scorecard::run(&root(), &rest),
+        Some("sbom") => sbom::run(&root(), &rest),
         Some("version") => version::run(&root(), &rest),
         Some("ico") => ico::run(&rest),
         Some("-h" | "--help" | "help") | None => {

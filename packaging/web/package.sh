@@ -52,6 +52,9 @@ fi
 # browser conversion exactly matches the pinned Apache-2.0 official checkpoint.
 PHOTOCRAFT_OFFICIAL_MOBILE_SAM_PT="$OFFICIAL_CACHE" PHOTOCRAFT_MOBILE_SAM_WEIGHTS="$MODEL_CACHE" \
   cargo test -p photocraft-ml --features mobile-sam --test model_provenance -- --ignored
+# The committed source SBOM is deterministic and must match the exact lockfile,
+# wasm target/features and model identity used for this package.
+cargo xtask sbom --check
 mkdir -p "$SITE/models"
 rm -f "$SITE/models/mobile-sam-tiny-vitt.safetensors.part-"*
 split -b 8388608 "$MODEL_CACHE" "$SITE/models/mobile-sam-tiny-vitt.safetensors.part-"
@@ -60,6 +63,7 @@ split -b 8388608 "$MODEL_CACHE" "$SITE/models/mobile-sam-tiny-vitt.safetensors.p
 # Served and archive users receive the model's source, licence and exact
 # provenance alongside the runtime asset.
 cp "$ROOT/NOTICE" "$ROOT/ATTRIBUTION.md" "$ROOT/LICENSE-APACHE" "$SITE/"
+cp "$ROOT/sbom/photocraft-web-source.cdx.json" "$SITE/"
 # Paths must be relative so the site works under any prefix (public_url = "./" in Trunk.toml).
 if grep -Eq '(src|href)="/[^/]' "$SITE/index.html"; then
   echo "error: $SITE/index.html has root-absolute URLs; it would break when served from a sub-path" >&2

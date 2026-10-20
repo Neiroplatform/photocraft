@@ -11,50 +11,25 @@ fn has_selection(app: &PhotocraftApp) -> bool {
     app.session.active().is_some_and(|state| state.doc.selection.is_some())
 }
 
-/// Pick a small set of well-separated points inside the deterministic subject
-/// mask. One centre point is often interpreted as an object part (for example
-/// one leaf); spatially distributed foreground prompts describe the complete
-/// main subject to SAM without hard-coding people, animals or product classes.
+/// Deterministic class-agnostic probes for automatic subject discovery. The ML
+/// backend evaluates them independently, rejects border-attached background
+/// proposals and joins related foreground pieces. They are intentionally not
+/// derived from the classical saliency selector: treating its rough mask as
+/// truth made a bad heuristic seed erase the actual person or product.
 fn subject_seed_points(app: &PhotocraftApp) -> Vec<[f64; 2]> {
-    let Some(selection) = app.session.active().and_then(|state| state.doc.selection.as_ref()) else { return Vec::new() };
-    let bounds = selection.content_bounds();
+    let Some(state) = app.session.active() else { return Vec::new() };
+    let bounds = state.doc.bounds();
     if bounds.is_empty() {
         return Vec::new();
     }
-    let mut candidates = Vec::new();
-    for gy in 0_i32..13 {
-        let y = bounds.y0 + ((2 * gy + 1) * bounds.height() as i32) / 26;
-        for gx in 0_i32..13 {
-            let x = bounds.x0 + ((2 * gx + 1) * bounds.width() as i32) / 26;
-            if selection.sample_channel(x, y, 0) > 0.5 {
-                candidates.push([f64::from(x) + 0.5, f64::from(y) + 0.5]);
-            }
-        }
-    }
-    if candidates.is_empty() {
-        return vec![[f64::from(bounds.x0 + bounds.x1) / 2.0, f64::from(bounds.y0 + bounds.y1) / 2.0]];
-    }
-    let centre = [f64::from(bounds.x0 + bounds.x1) / 2.0, f64::from(bounds.y0 + bounds.y1) / 2.0];
-    let distance = |left: [f64; 2], right: [f64; 2]| (left[0] - right[0]).powi(2) + (left[1] - right[1]).powi(2);
-    let first = candidates.iter().copied().min_by(|left, right| distance(*left, centre).total_cmp(&distance(*right, centre))).unwrap_or(centre);
-    let mut selected = vec![first];
-    while selected.len() < 5 && selected.len() < candidates.len() {
-        let next = candidates.iter().copied().filter(|candidate| !selected.contains(candidate)).max_by(|left, right| {
-            let left_distance = selected.iter().map(|seed| distance(*left, *seed)).fold(f64::INFINITY, f64::min);
-            let right_distance = selected.iter().map(|seed| distance(*right, *seed)).fold(f64::INFINITY, f64::min);
-            left_distance.total_cmp(&right_distance)
-        });
-        let Some(next) = next else { break };
-        selected.push(next);
-    }
-    selected
+    let point = |x: f64, y: f64| [f64::from(bounds.x0) + x * f64::from(bounds.width()), f64::from(bounds.y0) + y * f64::from(bounds.height())];
+    vec![point(0.5, 0.5), point(0.32, 0.38), point(0.32, 0.55), point(0.68, 0.38), point(0.68, 0.55)]
 }
 
 /// Obtain a subject selection without assuming that the subject is a person.
-/// The existing deterministic subject finder supplies a robust seed point;
-/// MobileSAM replaces its rough mask when ready. If the model is still loading,
-/// the classical mask remains a safe fallback instead of making the prompt do
-/// nothing.
+/// MobileSAM evaluates bounded class-agnostic probes and returns one foreground
+/// proposal. The classical selector is used only when the semantic service is
+/// unavailable, so a rough heuristic mask never biases model inference.
 fn start_subject_selection(app: &mut PhotocraftApp, after: crate::semantic_select_ui::AfterApply) -> Result<bool, String> {
     let coalesce = match &after {
         crate::semantic_select_ui::AfterApply::Nothing => None,
@@ -62,14 +37,16 @@ fn start_subject_selection(app: &mut PhotocraftApp, after: crate::semantic_selec
         | crate::semantic_select_ui::AfterApply::BlurBackground(key)
         | crate::semantic_select_ui::AfterApply::CopySelection(key) => Some(key.clone()),
     };
-    app.run("select.subject", serde_json::json!({"coalesce": coalesce}))?;
     let seeds = subject_seed_points(app);
     if seeds.is_empty() {
         return Err("Could not find a main object. Click the object once, then run the prompt again.".into());
     }
-    let refined = crate::semantic_select_ui::select_points_then(app, &seeds, egui::Modifiers::NONE, after);
-    if !refined && !has_selection(app) {
-        return Err("Object selection produced no usable mask".into());
+    let refined = crate::semantic_select_ui::select_automatic_subject_then(app, &seeds, egui::Modifiers::NONE, after);
+    if !refined {
+        app.run("select.subject", serde_json::json!({"coalesce": coalesce}))?;
+        if !has_selection(app) {
+            return Err("Object selection produced no usable mask".into());
+        }
     }
     Ok(refined)
 }
@@ -197,7 +174,8 @@ mod tests {
     use super::*;
     use photocraft_engine::Session;
     use photocraft_geom::Rect;
-    use photocraft_ml::{ModelIdentity, SegmentationMask};
+    use photocraft_ml::{ModelIdentity, SegmentationMask, SegmentationMode};
+    use std::cell::Cell;
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -243,19 +221,21 @@ mod tests {
     }
 
     #[test]
-    fn automatic_subject_uses_separated_points_inside_the_seed_selection() {
+    fn automatic_subject_uses_bounded_class_agnostic_probes() {
         let app = selected_app();
         let seeds = subject_seed_points(&app);
-        let selection = app.session.active().unwrap().doc.selection.as_ref().unwrap();
         assert_eq!(seeds.len(), 5);
-        assert!(seeds.iter().all(|point| selection.sample_channel(point[0].floor() as i32, point[1].floor() as i32, 0) > 0.5));
-        assert!(seeds.iter().any(|point| point[0] < 10.0));
-        assert!(seeds.iter().any(|point| point[0] > 17.0));
+        assert_eq!(seeds[0], [16.0, 12.0]);
+        assert!(seeds.iter().any(|point| point[0] < 12.0));
+        assert!(seeds.iter().any(|point| point[0] > 20.0));
     }
 
     #[test]
     fn async_subject_remove_background_is_one_undo_group() {
-        let service = |request: crate::semantic_select_ui::Request| {
+        let observed = Rc::new(Cell::new(None));
+        let observed_for_service = observed.clone();
+        let service = move |request: crate::semantic_select_ui::Request| {
+            observed_for_service.set(Some(request.mode));
             let (sender, receiver) = std::sync::mpsc::channel();
             let _ = sender.send(Ok(SegmentationMask {
                 width: request.width,
@@ -286,6 +266,7 @@ mod tests {
         assert!(layer.mask.is_some(), "{}", app.ui.status);
         assert!(state.doc.selection.is_none());
         assert_eq!(state.history.past_len(), history + 1);
+        assert_eq!(observed.get(), Some(SegmentationMode::AutomaticSubject));
         assert!(!app.ui.status_error, "{}", app.ui.status);
     }
 
@@ -311,7 +292,7 @@ mod tests {
         app.ui.ai_prompt = "убери фон".into();
         run_prompt(&mut app);
         assert!(crate::semantic_select_ui::is_pending(&app));
-        assert!(app.session.active().unwrap().doc.selection.is_some());
+        assert!(app.session.active().unwrap().doc.selection.is_none());
 
         assert!(crate::semantic_select_ui::cancel(&mut app));
 

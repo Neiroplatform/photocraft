@@ -4,7 +4,10 @@ use candle_core::{DType, Device, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::segment_anything::sam::Sam;
 
-use crate::{MOBILE_SAM_BYTES, MOBILE_SAM_SHA256, MlError, ModelIdentity, PointKind, SegmentationBackend, SegmentationMask, SegmentationRequest};
+use crate::{
+    MOBILE_SAM_BYTES, MOBILE_SAM_SHA256, MlError, ModelIdentity, PointKind, PromptPoint, SegmentationBackend, SegmentationMask, SegmentationMode,
+    SegmentationRequest,
+};
 
 pub struct MobileSamBackend {
     model: Sam,
@@ -46,7 +49,10 @@ impl SegmentationBackend for MobileSamBackend {
         let h = request.height as usize;
         let w = request.width as usize;
         let image = Tensor::from_slice(request.rgb, (h, w, 3), &self.device).and_then(|t| t.permute((2, 0, 1))).map_err(|e| MlError::Backend(e.to_string()))?;
-        let points = request.points.iter().map(|p| (p.x as f64, p.y as f64, p.kind == PointKind::Foreground)).collect::<Vec<_>>();
+        if request.mode == SegmentationMode::AutomaticSubject {
+            return self.segment_automatic_subject(&image, request);
+        }
+        let points = request.points.iter().map(model_point).collect::<Vec<_>>();
         // A single positive point is deliberately ambiguous: it can describe a
         // small part (a leaf), a larger part (the crown) or the complete object
         // (the potted plant). SAM's multi-mask mode returns those hypotheses
@@ -75,6 +81,104 @@ impl SegmentationBackend for MobileSamBackend {
         proposal.validate()?;
         Ok(proposal)
     }
+}
+
+impl MobileSamBackend {
+    /// Automatic background-removal requests carry several independent probes.
+    /// Encode the image once, evaluate each probe as its own SAM hypothesis,
+    /// reject border-dominant background masks and join related pieces of the
+    /// same foreground object. A manual click remains the ordinary one-prompt
+    /// path above, so it can intentionally select a nested detail.
+    fn segment_automatic_subject(&self, image: &Tensor, request: SegmentationRequest<'_>) -> Result<SegmentationMask, MlError> {
+        let (channels, h, w) = image.dims3().map_err(|error| MlError::Backend(error.to_string()))?;
+        if channels != 3 {
+            return Err(MlError::Backend("automatic subject image must be RGB".into()));
+        }
+        let embeddings = self.model.embeddings(image).map_err(|error| MlError::Backend(error.to_string()))?;
+        let mut candidates = Vec::new();
+        for (prompt_index, prompt) in request.points.iter().copied().enumerate() {
+            let point = [model_point(&prompt)];
+            let (masks, iou) = self.model.forward_for_embeddings(&embeddings, h, w, &point, true).map_err(|error| MlError::Backend(error.to_string()))?;
+            let masks = masks
+                .upsample_nearest2d(
+                    candle_transformers::models::segment_anything::sam::IMAGE_SIZE,
+                    candle_transformers::models::segment_anything::sam::IMAGE_SIZE,
+                )
+                .and_then(|tensor| tensor.get(0))
+                .and_then(|tensor| tensor.i((.., ..h, ..w)))
+                .map_err(|error| MlError::Backend(error.to_string()))?;
+            let scores = iou.flatten_all().and_then(|tensor| tensor.to_vec1::<f32>()).map_err(|error| MlError::Backend(error.to_string()))?;
+            let mut prompt_candidates = Vec::new();
+            for (index, confidence) in scores.into_iter().enumerate() {
+                if !confidence.is_finite() {
+                    continue;
+                }
+                let logits = masks.i(index).and_then(|mask| mask.to_vec2::<f32>()).map_err(|error| MlError::Backend(error.to_string()))?;
+                let mut alpha = Vec::with_capacity(w * h);
+                for row in logits {
+                    alpha.extend(row.into_iter().map(|value| if value > 0.0 { 255 } else { 0 }));
+                }
+                crate::postprocess::clean_clicked_object(request.width, request.height, &mut alpha, std::slice::from_ref(&prompt));
+                let metrics = crate::postprocess::automatic_mask_metrics(request.width, request.height, &alpha, prompt);
+                if metrics.viable() {
+                    prompt_candidates.push((alpha, metrics, confidence.clamp(0.0, 1.0)));
+                }
+            }
+            if let Some(candidate) = prompt_candidates
+                .into_iter()
+                .max_by(|left, right| automatic_candidate_score(left.1, left.2).total_cmp(&automatic_candidate_score(right.1, right.2)))
+            {
+                candidates.push((candidate.0, candidate.1, candidate.2, prompt_index));
+            }
+        }
+        let best = candidates
+            .iter()
+            .enumerate()
+            .filter(|(_, candidate)| candidate.3 == 0 && strong_centre_candidate(candidate.1))
+            .max_by(|(_, left), (_, right)| automatic_candidate_score(left.1, left.2).total_cmp(&automatic_candidate_score(right.1, right.2)))
+            .map(|(index, _)| index)
+            .or_else(|| {
+                candidates
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, left), (_, right)| automatic_candidate_score(left.1, left.2).total_cmp(&automatic_candidate_score(right.1, right.2)))
+                    .map(|(index, _)| index)
+            })
+            .ok_or_else(|| MlError::Backend("automatic subject discovery found only background masks".into()))?;
+        let (mut alpha, mut selected_metrics, confidence, selected_probe) = candidates.swap_remove(best);
+        let mut accepted_probes = vec![selected_probe];
+        for (candidate, metrics, _, candidate_probe) in candidates {
+            let allow_seam = accepted_probes.iter().any(|probe| vertical_probe_pair(*probe, candidate_probe));
+            if crate::postprocess::related_masks(request.width, request.height, &alpha, selected_metrics, &candidate, metrics, allow_seam) {
+                for (value, addition) in alpha.iter_mut().zip(candidate) {
+                    *value = (*value).max(addition);
+                }
+                let area = alpha.iter().filter(|value| **value >= 128).count();
+                selected_metrics = crate::postprocess::union_metrics(selected_metrics, metrics, area, alpha.len());
+                accepted_probes.push(candidate_probe);
+            }
+        }
+        let proposal = SegmentationMask { width: request.width, height: request.height, alpha, confidence: Some(confidence), model: self.identity.clone() };
+        proposal.validate()?;
+        Ok(proposal)
+    }
+}
+
+fn automatic_candidate_score(metrics: crate::postprocess::MaskMetrics, confidence: f32) -> f32 {
+    let background_penalty = if metrics.area_ratio > 0.55 { 1.0 } else { 0.0 };
+    metrics.score() + confidence * 0.05 - background_penalty
+}
+
+fn strong_centre_candidate(metrics: crate::postprocess::MaskMetrics) -> bool {
+    metrics.viable() && metrics.area_ratio >= 0.1 && metrics.area_ratio <= 0.45 && metrics.border_ratio <= 0.2 && metrics.edges_touched <= 1
+}
+
+fn vertical_probe_pair(left: usize, right: usize) -> bool {
+    matches!((left.min(right), left.max(right)), (1, 2) | (3, 4))
+}
+
+fn model_point(point: &PromptPoint) -> (f64, f64, bool) {
+    (point.x as f64, point.y as f64, point.kind == PointKind::Foreground)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

@@ -7,7 +7,7 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use photocraft_doc::DocId;
-use photocraft_ml::{PointKind, PromptPoint, SegmentationInput, SegmentationMask};
+use photocraft_ml::{PointKind, PromptPoint, SegmentationInput, SegmentationMask, SegmentationMode};
 
 use crate::PhotocraftApp;
 
@@ -47,12 +47,11 @@ pub(crate) fn is_pending(app: &PhotocraftApp) -> bool {
     app.semantic_select_pending.is_some()
 }
 
-/// Cancel inference without ever committing a late worker reply. AI actions
-/// may already have created a deterministic seed selection; roll that single
-/// coalesced step back so Cancel restores the exact pre-action document.
+/// Cancel inference without ever committing a late worker reply. Automatic
+/// subject discovery is proposal-only until the worker answers, so cancellation
+/// restores the exact pre-action document without an undo mutation.
 pub(crate) fn cancel(app: &mut PhotocraftApp) -> bool {
-    let Some(pending) = app.semantic_select_pending.take() else { return false };
-    crate::ai_edit_ui::rollback_failed_selection(app, &pending.after);
+    let Some(_pending) = app.semantic_select_pending.take() else { return false };
     app.ui.status = "Object selection cancelled".into();
     app.ui.status_error = false;
     true
@@ -79,10 +78,24 @@ pub(crate) fn select_at_then(app: &mut PhotocraftApp, point: [f64; 2], mods: egu
     select_points_then(app, &[point], mods, after)
 }
 
-/// Start inference from one or more foreground points. Multi-point prompts are
-/// used by automatic subject actions to describe the whole salient object,
-/// while ordinary object clicks keep the familiar single-point interaction.
+/// Start ordinary SAM inference from one or more joint prompt points.
 pub(crate) fn select_points_then(app: &mut PhotocraftApp, points: &[[f64; 2]], mods: egui::Modifiers, after: AfterApply) -> bool {
+    select_points_with_mode(app, points, mods, after, SegmentationMode::PromptPoints)
+}
+
+/// Start class-agnostic automatic subject discovery. Unlike joint point
+/// refinement, the backend evaluates these probes independently.
+pub(crate) fn select_automatic_subject_then(app: &mut PhotocraftApp, points: &[[f64; 2]], mods: egui::Modifiers, after: AfterApply) -> bool {
+    select_points_with_mode(app, points, mods, after, SegmentationMode::AutomaticSubject)
+}
+
+fn select_points_with_mode(
+    app: &mut PhotocraftApp,
+    points: &[[f64; 2]],
+    mods: egui::Modifiers,
+    after: AfterApply,
+    segmentation_mode: SegmentationMode,
+) -> bool {
     if app.semantic_select_pending.is_some() {
         app.ui.status = "The local object model is already processing a selection".into();
         app.ui.status_error = false;
@@ -113,7 +126,7 @@ pub(crate) fn select_points_then(app: &mut PhotocraftApp, points: &[[f64; 2]], m
         .collect();
     let document = state.doc.id;
     let revision = state.revision;
-    let request = Request { width: preview.width, height: preview.height, rgb, points };
+    let request = Request { width: preview.width, height: preview.height, rgb, points, mode: segmentation_mode };
     let Some(service) = app.services.semantic_select.as_mut() else {
         app.ui.status = "Local object model is unavailable; drag a box to use classical Object Selection".into();
         app.ui.status_error = true;
@@ -142,7 +155,6 @@ pub(crate) fn poll(app: &mut PhotocraftApp) -> bool {
     let proposal = match pending.receiver.try_recv() {
         Ok(Ok(mask)) => mask,
         Ok(Err(error)) => {
-            crate::ai_edit_ui::rollback_failed_selection(app, &pending.after);
             app.ui.status = error;
             app.ui.status_error = true;
             return true;
@@ -152,7 +164,6 @@ pub(crate) fn poll(app: &mut PhotocraftApp) -> bool {
             return false;
         }
         Err(TryRecvError::Disconnected) => {
-            crate::ai_edit_ui::rollback_failed_selection(app, &pending.after);
             app.ui.status = "The local object worker stopped before returning a selection".into();
             app.ui.status_error = true;
             return true;
@@ -167,7 +178,6 @@ pub(crate) fn poll(app: &mut PhotocraftApp) -> bool {
     let token = match app.session.stage_selection_proposal(proposal, true) {
         Ok(token) => token,
         Err(error) => {
-            crate::ai_edit_ui::rollback_failed_selection(app, &pending.after);
             app.ui.status = error.to_string();
             app.ui.status_error = true;
             return false;
@@ -254,6 +264,31 @@ mod tests {
         assert!(selection.sample_channel(10, 10, 0) < 0.5);
         assert!(selection.sample_channel(60, 30, 0) > 0.5);
         assert_eq!(calls.get(), 3);
+    }
+
+    #[test]
+    fn manual_multi_point_request_keeps_joint_prompt_mode() {
+        let observed = Rc::new(Cell::new(None));
+        let observed_for_service = observed.clone();
+        let service = move |request: Request| {
+            request.borrowed().validate().map_err(|error| error.to_string())?;
+            observed_for_service.set(Some(request.mode));
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let _ = sender.send(Ok(SegmentationMask {
+                width: request.width,
+                height: request.height,
+                alpha: vec![255; request.width as usize * request.height as usize],
+                confidence: Some(0.9),
+                model: ModelIdentity::mobile_sam_tiny(),
+            }));
+            Ok(receiver)
+        };
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services { semantic_select: Some(Box::new(service)), ..Default::default() });
+        app.session.execute("file.new", serde_json::json!({"width": 80, "height": 40})).unwrap();
+
+        assert!(select_points_then(&mut app, &[[10.0, 10.0], [60.0, 30.0]], egui::Modifiers::NONE, AfterApply::Nothing,));
+
+        assert_eq!(observed.get(), Some(SegmentationMode::PromptPoints));
     }
 
     #[test]
