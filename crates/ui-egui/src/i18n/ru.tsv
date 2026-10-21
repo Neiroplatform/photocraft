@@ -13,7 +13,7 @@
 # graphics-editor vocabulary (Слой, Каналы, Маска, Выделение, Кривые ...), matching Photoshop's
 # Russian menu tradition where it is unambiguous. No proprietary localisation resource was
 # consulted or copied; entries are added the same way.
-# Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
+# Product and technology names (Pixelle, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
 # letters; the trailing "…" of dialog commands is kept; the colon of a label ("Width:") becomes
 # the Russian typographic equivalent, with the space the source carries.
 
@@ -453,9 +453,9 @@
 	Hide All	Скрыть все
 
 # Help
-	About PhotoCraft	О программе PhotoCraft
-	PhotoCraft Website	Сайт PhotoCraft
-	PhotoCraft on GitHub	PhotoCraft на GitHub
+	About Pixelle	О программе Pixelle
+	Pixelle Website	Сайт Pixelle
+	Pixelle on GitHub	Pixelle на GitHub
 	Report an Issue…	Сообщить о проблеме…
 	ArtCraft Website	Сайт ArtCraft
 	Join the ArtCraft Discord…	Discord сообщества ArtCraft…
@@ -829,7 +829,7 @@
 	Embed Color Profile	Встроить цветовой профиль
 	Assign Profile…	Назначить профиль…
 	Convert to Profile…	Преобразовать в профиль…
-	PhotoCraft Manages Colors	PhotoCraft управляет цветами
+	Pixelle Manages Colors	Pixelle управляет цветами
 	Printer Manages Colors	Принтер управляет цветами
 	(print to the printer)	(печать на принтере)
 	Absolute Colorimetric	Абсолютный колориметрический
@@ -1394,8 +1394,8 @@
 	Use File › Open, or paste a copied image with {paste}.	Выберите Файл › Открыть или вставьте скопированное изображение с помощью {paste}.
 	Native file drag-and-drop is unavailable	Нативное перетаскивание файлов в Wayland недоступно
 	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or copy the image in your file manager and paste it with {paste}.	Нативное перетаскивание файлов в Wayland пока не поддерживается. Откройте файл через Файл › Открыть или скопируйте изображение в файловом менеджере и вставьте его с помощью {paste}.
-	To drop files, start PhotoCraft under XWayland: `{command}`	Чтобы перетаскивать файлы, запустите PhotoCraft в XWayland: `{command}`
-	Or set Preferences › Performance › Linux display server to X11: PhotoCraft then always starts under XWayland.	Или выберите в Настройки › Производительность › Дисплейный сервер Linux значение X11: PhotoCraft будет всегда запускаться в XWayland.
+	To drop files, start Pixelle under XWayland: `{command}`	Чтобы перетаскивать файлы, запустите Pixelle в XWayland: `{command}`
+	Or set Preferences › Performance › Linux display server to X11: Pixelle then always starts under XWayland.	Или выберите в Настройки › Производительность › Дисплейный сервер Linux значение X11: Pixelle будет всегда запускаться в XWayland.
 	Edit › Paste	Редактирование › Вставить
 	Photo	Фото
 	Print	Печать
@@ -1541,7 +1541,7 @@
 	Reverse	Обратить
 	Align with layer	По слою
 	Join us on Discord	Мы в Discord
-	PhotoCraft website	Сайт PhotoCraft
+	Pixelle website	Сайт Pixelle
 	ArtCraft	ArtCraft
 	GitHub	GitHub
 	No character style	Нет стиля символов
@@ -1567,7 +1567,7 @@
 	Don't Save	Не сохранять
 	No	Нет
 	Yes	Да
-	These settings aren't available in PhotoCraft yet.	Эти параметры пока недоступны в PhotoCraft.
+	These settings aren't available in Pixelle yet.	Эти параметры пока недоступны в Pixelle.
 	Shortcut removed.	Комбинация клавиш удалена.
 	All shortcuts reset to Photoshop defaults.	Все комбинации клавиш сброшены к стандартным Photoshop.
 	Delete Shortcut	Удалить комбинацию
@@ -2027,8 +2027,8 @@
 	Output:	Выход:
 	Paint Overlay	Перекрытие краской
 	Pattern Size	Размер паттерна
-	PhotoCraft	PhotoCraft
-	PhotoCraft — an open-source, native image editor written in Rust.	PhotoCraft — открытый нативный графический редактор на Rust.
+	Pixelle	Pixelle
+	Pixelle — an open-source, native image editor written in Rust.	Pixelle — открытый нативный графический редактор на Rust.
 	Position and Size	Положение и размер
 	Preserve Details	Сохранять детали
 	Preserve Luminosity	Сохранять светлоту
@@ -2328,7 +2328,7 @@
 	Automatic uses GPU acceleration when available and falls back to CPU rendering on errors.	Автоматический режим использует GPU, когда он доступен, и переходит на CPU при ошибках.
 	Switched to CPU rendering	Включена отрисовка на CPU
 	GPU acceleration could not continue. Your documents are unchanged.	Ускорение GPU остановлено. Документы не изменены.
-	PhotoCraft is using the CPU image compositor. The window may still use your graphics adapter.	PhotoCraft обрабатывает изображения на CPU. Окно может продолжать использовать графический адаптер.
+	Pixelle is using the CPU image compositor. The window may still use your graphics adapter.	Pixelle обрабатывает изображения на CPU. Окно может продолжать использовать графический адаптер.
 	Retry GPU requires a restart. Save your work first.	Для повтора GPU нужен перезапуск. Сначала сохраните работу.
 	Keep Using CPU	Продолжить с CPU
 	Retry GPU	Повторить GPU

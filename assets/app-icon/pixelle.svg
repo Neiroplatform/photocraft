@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Pixelle</title>
+  <desc id="desc">A lime pixel P on a dark rounded square.</desc>
+  <rect width="512" height="512" rx="104" fill="#11151a"/>
+  <path fill="#d7ff3f" d="M112 96h176c70.7 0 128 57.3 128 128s-57.3 128-128 128h-80v64h-96V96zm96 88v80h72c22.1 0 40-17.9 40-40s-17.9-40-40-40h-72z"/>
+  <rect x="352" y="352" width="64" height="64" rx="12" fill="#f4f7ed"/>
+</svg>

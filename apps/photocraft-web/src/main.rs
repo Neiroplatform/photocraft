@@ -57,6 +57,19 @@ mod tests {
     }
 
     #[test]
+    fn page_uses_pixelle_title_and_first_party_svg_favicon() {
+        let html = include_str!("../index.html");
+        let favicon = include_str!("../../../assets/app-icon/pixelle.svg");
+        assert!(html.contains("<title>Pixelle</title>"));
+        assert!(html.contains("rel=\"icon\" type=\"image/svg+xml\" href=\"pixelle.svg\""));
+        assert!(html.contains("data-trunk rel=\"copy-file\" href=\"../../assets/app-icon/pixelle.svg\""));
+        assert!(favicon.contains("<title id=\"title\">Pixelle</title>"));
+        for legacy in ["PhotoCraft", "ArtCraft", "Join us on Discord", "github.com/storytold"] {
+            assert!(!html.contains(legacy), "legacy public branding remains: {legacy}");
+        }
+    }
+
+    #[test]
     fn firefox_uses_the_stable_webgl_backend_unless_webgpu_is_explicit() {
         let firefox = "Mozilla/5.0 Gecko/20100101 Firefox/145.0";
         assert!(use_webgl("", firefox));

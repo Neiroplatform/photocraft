@@ -68,13 +68,8 @@ pub const UI_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("window.theme.studioLight", "Studio Light Theme", &["Window", "Theme"], None),
     ("window.theme.classic", "Classic Theme", &["Window", "Theme"], None),
     ("edit.search", "Search…", &["Edit"], Some("Cmd+F")),
-    ("help.discord", "Join the ArtCraft Discord…", &["Help"], None),
-    ("help.website", "PhotoCraft Website", &["Help"], None),
-    ("help.artcraftWebsite", "ArtCraft Website", &["Help"], None),
-    ("help.github", "PhotoCraft on GitHub", &["Help"], None),
-    ("help.reportIssue", "Report an Issue…", &["Help"], None),
     ("help.systemInfo", "System Info…", &["Help"], None),
-    ("help.about", "About PhotoCraft", &["Help"], None),
+    ("help.about", "About Pixelle", &["Help"], None),
 ];
 
 /// Photoshop's Window › <panel> ids for the panels the shell already has, as `window.toggle.*`.
@@ -137,10 +132,6 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
     // A pending Pen anchor is gesture state; Edit › Undo must match the keyboard.
     if id == "edit.undo" && crate::vector_ui::pen_undo_last_point(app) {
         return Ok(Value::Null);
-    }
-    // Help › Discord, website, GitHub, Report an Issue.
-    if let Some(url) = crate::links::url_for(id) {
-        return Ok(crate::links::open(app, ctx, url));
     }
     if id == "view.proofSetup.custom" {
         return Ok(json!({"dialog": crate::filter_dialog::open(app, "view.proofSetup")}));
@@ -530,7 +521,6 @@ pub fn is_enabled(app: &PhotocraftApp, id: &str) -> bool {
     match id {
         "file.open" | "file.exit" | "file.clearRecent" | "help.about" | "help.systemInfo" | "edit.search" => true,
         i if i.starts_with("file.openRecent.") => true,
-        i if crate::links::url_for(i).is_some() => true,
         i if i.starts_with("window.theme.") => true,
         "file.save" | "file.saveAs" | "file.export.exportAs" | "file.export.quickExportAsPng" => {
             app.session.active().is_some() && app.services.export.is_some()
@@ -813,13 +803,6 @@ pub fn menu_items(app: &PhotocraftApp) -> Vec<MenuItem> {
         for (k, it) in recent.into_iter().enumerate() {
             items.insert(after + 1 + k, it);
         }
-    }
-    // Help: the link items, a separator, then System Info and About.
-    if let Some(at) = items.iter().position(|i| i.id == "help.systemInfo" || i.id == "help.about") {
-        items.insert(
-            at,
-            MenuItem { id: "---".into(), label: "---".into(), path: vec!["Help".into()], shortcut: None, enabled: false, checked: None, color: None },
-        );
     }
     // Edit › Keyboard Shortcuts overrides, Edit › Menus hidden items and colours.
     let prefs = app.session.prefs();
@@ -1427,7 +1410,7 @@ mod tests {
                 }
                 h.run_steps(3);
             };
-            let open = |h: &Harness<'_, PhotocraftApp>| h.query_by_label_contains("About PhotoCraft").is_some();
+            let open = |h: &Harness<'_, PhotocraftApp>| h.query_by_label_contains("About Pixelle").is_some();
             let field_id = egui::Id::new("help-menu-search").with("field");
             let help = h.get_by_label("Help").rect().center();
             click(&mut h, help);

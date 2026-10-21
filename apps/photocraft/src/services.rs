@@ -36,7 +36,7 @@ fn open_filter_extensions(extensions: &[&str]) -> Vec<String> {
 /// keeps defaulting to Photoshop.
 const SAVE_FILTERS: &[(&str, &[&str])] = &[
     ("Photoshop", &["psd", "psb"]),
-    ("PhotoCraft", &["pcraft"]),
+    ("Pixelle", &["pcraft"]),
     ("PNG", &["png"]),
     ("JPEG", &["jpg"]),
     ("WebP", &["webp"]),
@@ -80,7 +80,7 @@ fn show_file_dialog(request: FileDialogRequest, parent: Option<&eframe::Frame>, 
             if let Some(dir) = initial_dir {
                 dialog = dialog.set_directory(dir);
             }
-            let dialog = dialog.add_filter("All Formats", &open_filter_extensions(OPEN_EXTS)).add_filter("PhotoCraft", &open_filter_extensions(&["pcraft"]));
+            let dialog = dialog.add_filter("All Formats", &open_filter_extensions(OPEN_EXTS)).add_filter("Pixelle", &open_filter_extensions(&["pcraft"]));
             if multiple {
                 let picked = dialog.pick_files();
                 Box::pin(async move { picked.await.map(|files| FileDialogAnswer::Paths(files.iter().map(path_of).collect())) })

@@ -12,7 +12,7 @@
 # Clean-room: every entry was written from the plain meaning of the English label using ordinary
 # Brazilian Portuguese computing vocabulary (camada, desfoque, seleção, demarcador ...). No
 # proprietary localisation resource, string table or product UI was consulted or copied; add
-# entries the same way. Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...)
+# entries the same way. Product and technology names (Pixelle, ArtCraft, OpenType, CMYK, Lab ...)
 # stay as they are; the trailing "…" of dialog commands is kept.
 
 	File	Arquivo
@@ -687,9 +687,9 @@
 	Timeline	Linha do tempo
 	Tool Presets	Predefinições de ferramentas
 	Tools	Ferramentas
-	About PhotoCraft	Sobre o PhotoCraft
-	PhotoCraft Website	Site do PhotoCraft
-	PhotoCraft on GitHub	PhotoCraft no GitHub
+	About Pixelle	Sobre o Pixelle
+	Pixelle Website	Site do Pixelle
+	Pixelle on GitHub	Pixelle no GitHub
 	ArtCraft Website	Site do ArtCraft
 	Join the ArtCraft Discord…	Participe do Discord do ArtCraft…
 	Report an Issue…	Relatar um problema…
@@ -1211,9 +1211,9 @@
 	Perspective Warp is not active	A distorção de perspectiva não está ativa
 	Perspective Warp: draw planes along the image's perspective, then switch to Warp	Distorção de perspectiva: desenhe planos seguindo a perspectiva da imagem e depois mude para Deformar
 	Photo Filter	Filtro de fotos
-	PhotoCraft	PhotoCraft
-	PhotoCraft Manages Colors	O PhotoCraft gerencia as cores
-	PhotoCraft — an open-source, native image editor written in Rust.	PhotoCraft — um editor de imagens nativo e de código aberto escrito em Rust.
+	Pixelle	Pixelle
+	Pixelle Manages Colors	O Pixelle gerencia as cores
+	Pixelle — an open-source, native image editor written in Rust.	Pixelle — um editor de imagens nativo e de código aberto escrito em Rust.
 	Pin Depth:	Profundidade do alfinete:
 	Pixel Length:	Comprimento em pixels:
 	Pixels/Centimeter	Pixels/centímetro
@@ -1599,7 +1599,7 @@
 	Pen Tilt	Inclinação da caneta
 	Pen Tool	Ferramenta Caneta
 	Photo	Foto
-	PhotoCraft website	Site do PhotoCraft
+	Pixelle website	Site do Pixelle
 	Picas	Paicas
 	Pillow Emboss	Entalhe almofadado
 	Pixel Replacement	Substituição de pixels
@@ -1911,7 +1911,7 @@
 	System Info	Informações do sistema
 	More panels	Mais painéis
 	More documents	Mais documentos
-	These settings aren't available in PhotoCraft yet.	Estas configurações ainda não estão disponíveis no PhotoCraft.
+	These settings aren't available in Pixelle yet.	Estas configurações ainda não estão disponíveis no Pixelle.
 	Graphics	Gráficos
 	Reset GPU Backend	Redefinir backend da GPU
 	Applies at next launch.	Aplica-se na próxima inicialização.
@@ -2469,8 +2469,8 @@
 	Use Global Light	Usar luz global
 	Native file drag-and-drop is unavailable	Arrastar e soltar arquivos não está disponível
 	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or copy the image in your file manager and paste it with {paste}.	O recurso nativo de arrastar e soltar arquivos ainda não funciona no Wayland. Use Arquivo › Abrir ou copie a imagem no gerenciador de arquivos e cole-a com {paste}.
-	To drop files, start PhotoCraft under XWayland: `{command}`	Para soltar arquivos, execute o PhotoCraft no XWayland: `{command}`
-	Or set Preferences › Performance › Linux display server to X11: PhotoCraft then always starts under XWayland.	Ou defina Preferências › Desempenho › Servidor de exibição Linux como X11: o PhotoCraft passa a iniciar sempre no XWayland.
+	To drop files, start Pixelle under XWayland: `{command}`	Para soltar arquivos, execute o Pixelle no XWayland: `{command}`
+	Or set Preferences › Performance › Linux display server to X11: Pixelle then always starts under XWayland.	Ou defina Preferências › Desempenho › Servidor de exibição Linux como X11: o Pixelle passa a iniciar sempre no XWayland.
 	Edit › Paste	Editar › Colar
 	Use File › Open, or paste a copied image with {paste}.	Use Arquivo › Abrir ou cole uma imagem copiada com {paste}.
 	Mixer Brush Tool	Ferramenta Pincel misturador
@@ -2485,7 +2485,7 @@
 	Automatic uses GPU acceleration when available and falls back to CPU rendering on errors.	O modo automático usa a aceleração por GPU quando disponível e volta para a renderização por CPU em caso de erros.
 	Switched to CPU rendering	Renderização alterada para CPU
 	GPU acceleration could not continue. Your documents are unchanged.	A aceleração por GPU não pôde continuar. Seus documentos não foram alterados.
-	PhotoCraft is using the CPU image compositor. The window may still use your graphics adapter.	O PhotoCraft está usando o compositor de imagens da CPU. A janela ainda pode usar seu adaptador gráfico.
+	Pixelle is using the CPU image compositor. The window may still use your graphics adapter.	O Pixelle está usando o compositor de imagens da CPU. A janela ainda pode usar seu adaptador gráfico.
 	Retry GPU requires a restart. Save your work first.	Tentar a GPU novamente exige reiniciar. Salve seu trabalho primeiro.
 	Keep Using CPU	Continuar usando a CPU
 	Retry GPU	Tentar a GPU novamente

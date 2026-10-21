@@ -528,7 +528,7 @@ fn save_for_web(app: &mut PhotocraftApp, p: Value) -> Result<Value, String> {
 pub fn open_print(app: &mut PhotocraftApp) -> u64 {
     let mut f = Map::new();
     f.insert("__print".into(), json!(true));
-    f.insert("__label".into(), json!("PhotoCraft Print Settings"));
+    f.insert("__label".into(), json!("Pixelle Print Settings"));
     if let Some(Value::Object(m)) = app.session.file_menu.last_print.clone() {
         f.extend(m);
     }
@@ -651,7 +651,7 @@ fn print_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Va
                 "colorHandling",
                 &[
                     ("printerManages", tl!("Printer Manages Colors")),
-                    ("photocraftManages", tl!("PhotoCraft Manages Colors")),
+                    ("photocraftManages", tl!("Pixelle Manages Colors")),
                     ("noColorManagement", tl!("No Color Management")),
                 ],
                 240.0,

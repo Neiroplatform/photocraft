@@ -9,7 +9,7 @@
 # Clean-room: every entry was written from the plain meaning of the English label using ordinary
 # Indonesian computing vocabulary (layer, kuas, seleksi, kanvas ...). No proprietary localisation
 # resource, string table or product UI was consulted or copied; add entries the same way.
-# Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
+# Product and technology names (Pixelle, ArtCraft, OpenType, CMYK, Lab ...) stay in Latin
 # letters; the trailing "…" of dialog commands is kept.
 	File	Berkas
 	Edit	Edit
@@ -683,9 +683,9 @@
 	Timeline	Timeline
 	Tool Presets	Preset Alat
 	Tools	Alat
-	About PhotoCraft	Tentang PhotoCraft
-	PhotoCraft Website	Situs Web PhotoCraft
-	PhotoCraft on GitHub	PhotoCraft di GitHub
+	About Pixelle	Tentang Pixelle
+	Pixelle Website	Situs Web Pixelle
+	Pixelle on GitHub	Pixelle di GitHub
 	ArtCraft Website	Situs Web ArtCraft
 	Join the ArtCraft Discord…	Gabung ke Discord ArtCraft…
 	Report an Issue…	Laporkan Masalah…
@@ -1206,9 +1206,9 @@
 	Perspective Warp is not active	Perspective Warp tidak aktif
 	Perspective Warp: draw planes along the image's perspective, then switch to Warp	Perspective Warp: gambar bidang mengikuti perspektif gambar, lalu pindah ke Warp
 	Photo Filter	Filter Foto
-	PhotoCraft	PhotoCraft
-	PhotoCraft Manages Colors	PhotoCraft Mengelola Warna
-	PhotoCraft — an open-source, native image editor written in Rust.	PhotoCraft — editor gambar native open-source yang ditulis dengan Rust.
+	Pixelle	Pixelle
+	Pixelle Manages Colors	Pixelle Mengelola Warna
+	Pixelle — an open-source, native image editor written in Rust.	Pixelle — editor gambar native open-source yang ditulis dengan Rust.
 	Pin Depth:	Kedalaman Pin:
 	Pixel Length:	Panjang Piksel:
 	Pixels/Centimeter	Piksel/Sentimeter
@@ -1594,7 +1594,7 @@
 	Pen Tilt	Kemiringan Pena
 	Pen Tool	Alat Pen
 	Photo	Foto
-	PhotoCraft website	Situs web PhotoCraft
+	Pixelle website	Situs web Pixelle
 	Picas	Pica
 	Pillow Emboss	Pillow Emboss
 	Pixel Replacement	Penggantian Piksel
@@ -1906,7 +1906,7 @@
 	System Info	Info Sistem
 	More panels	Panel lainnya
 	More documents	Dokumen lainnya
-	These settings aren't available in PhotoCraft yet.	Pengaturan ini belum tersedia di PhotoCraft.
+	These settings aren't available in Pixelle yet.	Pengaturan ini belum tersedia di Pixelle.
 	Graphics	Grafis
 	Reset GPU Backend	Reset Backend GPU
 	Applies at next launch.	Berlaku saat dibuka berikutnya.
@@ -2462,8 +2462,8 @@
 	Use Global Light	Gunakan Cahaya Global
 	Native file drag-and-drop is unavailable	Seret dan lepas berkas native tidak tersedia
 	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or copy the image in your file manager and paste it with {paste}.	Seret dan lepas berkas native belum didukung di Wayland. Gunakan Berkas › Buka, atau salin gambar di pengelola berkas lalu tempel dengan {paste}.
-	To drop files, start PhotoCraft under XWayland: `{command}`	Untuk menjatuhkan berkas, jalankan PhotoCraft di XWayland: `{command}`
-	Or set Preferences › Performance › Linux display server to X11: PhotoCraft then always starts under XWayland.	Atau atur Preferensi › Performa › Server tampilan Linux ke X11: PhotoCraft lalu selalu berjalan di XWayland.
+	To drop files, start Pixelle under XWayland: `{command}`	Untuk menjatuhkan berkas, jalankan Pixelle di XWayland: `{command}`
+	Or set Preferences › Performance › Linux display server to X11: Pixelle then always starts under XWayland.	Atau atur Preferensi › Performa › Server tampilan Linux ke X11: Pixelle lalu selalu berjalan di XWayland.
 	Edit › Paste	Edit › Tempel
 	Use File › Open, or paste a copied image with {paste}.	Gunakan Berkas › Buka, atau tempel gambar yang disalin dengan {paste}.
 	Mixer Brush Tool	Alat Kuas Pencampur
@@ -2500,7 +2500,7 @@ cameraRaw	Blending	Pembauran
 	Automatic uses GPU acceleration when available and falls back to CPU rendering on errors.	Mode otomatis memakai akselerasi GPU bila tersedia dan beralih ke rendering CPU jika terjadi galat.
 	Switched to CPU rendering	Beralih ke rendering CPU
 	GPU acceleration could not continue. Your documents are unchanged.	Akselerasi GPU tidak dapat dilanjutkan. Dokumen Anda tidak berubah.
-	PhotoCraft is using the CPU image compositor. The window may still use your graphics adapter.	PhotoCraft menggunakan kompositor gambar CPU. Jendela mungkin masih menggunakan adaptor grafis Anda.
+	Pixelle is using the CPU image compositor. The window may still use your graphics adapter.	Pixelle menggunakan kompositor gambar CPU. Jendela mungkin masih menggunakan adaptor grafis Anda.
 	Retry GPU requires a restart. Save your work first.	Mencoba GPU lagi memerlukan mulai ulang. Simpan pekerjaan Anda terlebih dahulu.
 	Keep Using CPU	Tetap Gunakan CPU
 	Retry GPU	Coba GPU Lagi

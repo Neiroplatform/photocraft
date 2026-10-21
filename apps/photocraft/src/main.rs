@@ -73,7 +73,7 @@ fn native_options(custom_titlebar: bool) -> eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_icon(app_icon::window_icon())
             .with_app_id(APP_ID)
-            .with_title("PhotoCraft")
+            .with_title("Pixelle")
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([760.0, 480.0])
             .with_drag_and_drop(true)
@@ -199,7 +199,7 @@ fn main() -> eframe::Result {
     // and usage errors leave no file behind. Records logged until now are written to it first.
     if let (Some(logger), Some(dir)) = (logger, services::config_dir()) {
         match logger.attach_dir(&dir.join("logs")) {
-            Ok(path) => log::info!("PhotoCraft {}, log file {}", photocraft_engine::build_info::long_version(), path.display()),
+            Ok(path) => log::info!("Pixelle {}, log file {}", photocraft_engine::build_info::long_version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
             Err(e) => log::warn!("no log file: {e}"),
         }
@@ -326,7 +326,7 @@ fn main() -> eframe::Result {
     let created_in_callback = app_created.clone();
     let started_sentinel = sentinel.clone();
     let result = eframe::run_native(
-        "PhotoCraft",
+        "Pixelle",
         options,
         Box::new(move |cc| {
             created_in_callback.store(true, std::sync::atomic::Ordering::Relaxed);

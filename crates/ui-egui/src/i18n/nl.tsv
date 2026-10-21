@@ -4,7 +4,7 @@
 # Clean-room: every entry was written from the plain meaning of the English label using ordinary
 # Dutch computing vocabulary (laag, selectie, masker, aanpassingslaag, penseel, verloop ...). No
 # proprietary localisation resource, string table or product UI was consulted or copied; add
-# entries the same way. Product and technology names (PhotoCraft, ArtCraft, OpenType, CMYK, Lab ...)
+# entries the same way. Product and technology names (Pixelle, ArtCraft, OpenType, CMYK, Lab ...)
 # stay as they are; the trailing "…" of dialog commands is kept. UI text addresses the user
 # informally ("je") and uses sentence case.
 
@@ -689,9 +689,9 @@
 	Timeline	Tijdlijn
 	Tool Presets	Gereedschapsvoorinstellingen
 	Tools	Gereedschappen
-	About PhotoCraft	Over PhotoCraft
-	PhotoCraft Website	Website van PhotoCraft
-	PhotoCraft on GitHub	PhotoCraft op GitHub
+	About Pixelle	Over Pixelle
+	Pixelle Website	Website van Pixelle
+	Pixelle on GitHub	Pixelle op GitHub
 	ArtCraft Website	Website van ArtCraft
 	Join the ArtCraft Discord…	Deelnemen aan de ArtCraft-Discord…
 	Report an Issue…	Probleem melden…
@@ -972,8 +972,8 @@
 	Drop an image or PSD anywhere to open it.	Sleep een afbeelding of PSD ergens naartoe om deze te openen.
 	Native file drag-and-drop is unavailable	Bestanden slepen en neerzetten is niet beschikbaar
 	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or copy the image in your file manager and paste it with {paste}.	Bestanden slepen en neerzetten wordt nog niet ondersteund onder Wayland. Gebruik Bestand › Openen, of kopieer de afbeelding in je bestandsbeheerder en plak deze met {paste}.
-	To drop files, start PhotoCraft under XWayland: `{command}`	Start PhotoCraft onder XWayland om bestanden neer te zetten: `{command}`
-	Or set Preferences › Performance › Linux display server to X11: PhotoCraft then always starts under XWayland.	Of zet Voorkeuren › Prestaties › Linux-weergaveserver op X11: PhotoCraft start dan altijd onder XWayland.
+	To drop files, start Pixelle under XWayland: `{command}`	Start Pixelle onder XWayland om bestanden neer te zetten: `{command}`
+	Or set Preferences › Performance › Linux display server to X11: Pixelle then always starts under XWayland.	Of zet Voorkeuren › Prestaties › Linux-weergaveserver op X11: Pixelle start dan altijd onder XWayland.
 	Edit › Paste	Bewerken › Plakken
 	Duplicate Layers…	Lagen dupliceren…
 	Duplicate style	Stijl dupliceren
@@ -1220,9 +1220,9 @@
 	Perspective Warp is not active	Perspectiefvervorming is niet actief
 	Perspective Warp: draw planes along the image's perspective, then switch to Warp	Perspectiefvervorming: teken vlakken langs het perspectief van de afbeelding en schakel daarna naar Verbuigen
 	Photo Filter	Fotofilter
-	PhotoCraft	PhotoCraft
-	PhotoCraft Manages Colors	PhotoCraft beheert kleuren
-	PhotoCraft — an open-source, native image editor written in Rust.	PhotoCraft — een opensource, native afbeeldingseditor geschreven in Rust.
+	Pixelle	Pixelle
+	Pixelle Manages Colors	Pixelle beheert kleuren
+	Pixelle — an open-source, native image editor written in Rust.	Pixelle — een opensource, native afbeeldingseditor geschreven in Rust.
 	Pin Depth:	Speldiepte:
 	Pixel Length:	Pixellengte:
 	Pixels/Centimeter	Pixels/centimeter
@@ -1608,7 +1608,7 @@
 	Pen Tilt	Penkanteling
 	Pen Tool	Pengereedschap
 	Photo	Foto
-	PhotoCraft website	Website van PhotoCraft
+	Pixelle website	Website van Pixelle
 	Picas	Pica's
 	Pillow Emboss	Kussenreliëf
 	Pixel Replacement	Pixelvervanging
@@ -1924,7 +1924,7 @@
 	System Info	Systeeminformatie
 	More panels	Meer panelen
 	More documents	Meer documenten
-	These settings aren't available in PhotoCraft yet.	Deze instellingen zijn nog niet beschikbaar in PhotoCraft.
+	These settings aren't available in Pixelle yet.	Deze instellingen zijn nog niet beschikbaar in Pixelle.
 	Graphics	Grafisch
 	Reset GPU Backend	GPU-backend herstellen
 	Applies at next launch.	Wordt toegepast bij de volgende start.
@@ -2103,7 +2103,7 @@
 	Automatic uses GPU acceleration when available and falls back to CPU rendering on errors.	Automatisch gebruikt GPU-versnelling indien beschikbaar en valt bij fouten terug op CPU-rendering.
 	Switched to CPU rendering	Overgeschakeld naar CPU-rendering
 	GPU acceleration could not continue. Your documents are unchanged.	GPU-versnelling kon niet doorgaan. Je documenten zijn ongewijzigd.
-	PhotoCraft is using the CPU image compositor. The window may still use your graphics adapter.	PhotoCraft gebruikt de CPU-beeldcompositor. Het venster kan nog steeds je grafische adapter gebruiken.
+	Pixelle is using the CPU image compositor. The window may still use your graphics adapter.	Pixelle gebruikt de CPU-beeldcompositor. Het venster kan nog steeds je grafische adapter gebruiken.
 	Retry GPU requires a restart. Save your work first.	GPU opnieuw proberen vereist een herstart. Sla eerst je werk op.
 	Keep Using CPU	CPU blijven gebruiken
 	Retry GPU	GPU opnieuw proberen
@@ -2458,7 +2458,7 @@ cameraRaw	Color	Kleur
 	Restart Required	Herstart vereist
 	Restart	Opnieuw starten
 	Quit	Afsluiten
-	Quit PhotoCraft	PhotoCraft afsluiten
+	Quit Pixelle	Pixelle afsluiten
 	Close Window	Venster sluiten
 	New Window	Nieuw venster
 	Open Image	Afbeelding openen
@@ -3227,7 +3227,7 @@ cameraRaw	Color	Kleur
 	Modify Date	Wijzigingsdatum
 	Mosaic	Mozaïek
 	Motion Blur	Bewegingsonscherpte
-	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or run PhotoCraft under XWayland with `WAYLAND_DISPLAY= photocraft`.	Bestanden slepen en neerzetten wordt nog niet ondersteund onder Wayland. Gebruik Bestand › Openen, of start PhotoCraft onder XWayland met `WAYLAND_DISPLAY= photocraft`.
+	Native file drag-and-drop is not supported on Wayland yet. Use File › Open, or run Pixelle under XWayland with `WAYLAND_DISPLAY= photocraft`.	Bestanden slepen en neerzetten wordt nog niet ondersteund onder Wayland. Gebruik Bestand › Openen, of start Pixelle onder XWayland met `WAYLAND_DISPLAY= photocraft`.
 	Neon Glow	Neongloed
 	New Guide Layout	Nieuwe hulplijnindeling
 	New Path	Nieuw pad
