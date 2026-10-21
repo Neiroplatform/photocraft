@@ -142,15 +142,24 @@ fn proposal_region(proposal: &Proposal) -> Result<Option<Region>> {
     let (preview_w, preview_h) = (proposal.mask.width as usize, proposal.mask.height as usize);
     let (canvas_w, canvas_h) = (proposal.canvas.width() as usize, proposal.canvas.height() as usize);
     let mut full = vec![0u8; canvas_w.saturating_mul(canvas_h)];
+    let horizontal: Vec<_> = (0..canvas_w).map(|x| sample_axis(x, preview_w, canvas_w)).collect();
     for y in 0..canvas_h {
-        let source_y = y.saturating_mul(preview_h) / canvas_h.max(1);
-        for x in 0..canvas_w {
-            let source_x = x.saturating_mul(preview_w) / canvas_w.max(1);
-            if let (Some(source), Some(target)) = (
-                proposal.mask.alpha.get(source_y.saturating_mul(preview_w).saturating_add(source_x)),
-                full.get_mut(y.saturating_mul(canvas_w).saturating_add(x)),
-            ) {
-                *target = *source;
+        let (source_y0, source_y1, weight_y, denominator_y) = sample_axis(y, preview_h, canvas_h);
+        for (x, &(source_x0, source_x1, weight_x, denominator_x)) in horizontal.iter().enumerate() {
+            let sample = |source_x: usize, source_y: usize| {
+                proposal.mask.alpha.get(source_y.saturating_mul(preview_w).saturating_add(source_x)).copied().unwrap_or(0) as u64
+            };
+            if let Some(target) = full.get_mut(y.saturating_mul(canvas_w).saturating_add(x)) {
+                let wx0 = denominator_x.saturating_sub(weight_x);
+                let wx1 = weight_x;
+                let wy0 = denominator_y.saturating_sub(weight_y);
+                let wy1 = weight_y;
+                let denominator = denominator_x.saturating_mul(denominator_y).max(1);
+                let coverage = sample(source_x0, source_y0) * wx0 * wy0
+                    + sample(source_x1, source_y0) * wx1 * wy0
+                    + sample(source_x0, source_y1) * wx0 * wy1
+                    + sample(source_x1, source_y1) * wx1 * wy1;
+                *target = ((coverage + denominator / 2) / denominator).min(u64::from(u8::MAX)) as u8;
             }
         }
     }
@@ -175,6 +184,27 @@ fn proposal_region(proposal: &Proposal) -> Result<Option<Region>> {
         bbox: Rect::new(proposal.canvas.x0 + x0 as i32, proposal.canvas.y0 + y0 as i32, proposal.canvas.x0 + x1 as i32, proposal.canvas.y0 + y1 as i32),
         mask,
     }))
+}
+
+/// Pixel-centred source interval and exact integer interpolation weight.
+/// Keeping the mapping rational makes native and WASM masks byte-identical.
+fn sample_axis(output: usize, source_len: usize, output_len: usize) -> (usize, usize, u64, u64) {
+    if source_len <= 1 || output_len == 0 {
+        return (0, 0, 0, 1);
+    }
+    let denominator = (output_len as u64).saturating_mul(2).max(1);
+    let centred = ((output as u64).saturating_mul(2).saturating_add(1)).saturating_mul(source_len as u64);
+    let Some(position) = centred.checked_sub(output_len as u64) else {
+        return (0, 0, 0, 1);
+    };
+    let maximum = (source_len.saturating_sub(1) as u64).saturating_mul(denominator);
+    if position >= maximum {
+        let last = source_len - 1;
+        return (last, last, 0, 1);
+    }
+    let left = (position / denominator) as usize;
+    let weight = position % denominator;
+    (left, left + 1, weight, denominator)
 }
 
 fn has_doc(s: &Session) -> std::result::Result<(), String> {
@@ -270,6 +300,22 @@ mod tests {
         let add = session.stage_selection_proposal(mask(vec![255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0]), false).unwrap_or(0);
         assert!(session.execute(APPLY, json!({"token": add, "mode": "add"})).is_ok());
         assert!(selected(&session, 0, 3) > 0.9 && selected(&session, 7, 3) > 0.9);
+    }
+
+    #[test]
+    fn preview_mask_expansion_preserves_soft_boundary_coverage() {
+        let mut session = session();
+        let alpha = vec![0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255];
+        let token = session.stage_selection_proposal(mask(alpha), false).unwrap_or(0);
+
+        assert!(session.execute(APPLY, json!({"token": token})).is_ok());
+
+        let left_fringe = selected(&session, 3, 3);
+        let right_fringe = selected(&session, 4, 3);
+        assert!(left_fringe > 0.0 && left_fringe < 0.5, "left edge coverage was {left_fringe}");
+        assert!(right_fringe > 0.5 && right_fringe < 1.0, "right edge coverage was {right_fringe}");
+        assert!(selected(&session, 2, 3) < 0.01);
+        assert!(selected(&session, 5, 3) > 0.99);
     }
 
     #[test]

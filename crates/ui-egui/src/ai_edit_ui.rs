@@ -52,7 +52,7 @@ fn start_subject_selection(app: &mut PhotocraftApp, after: crate::semantic_selec
 }
 
 fn remove_background(app: &mut PhotocraftApp, refined: bool, coalesce: Option<&str>) -> Result<String, String> {
-    app.run("layer.removeBackground", serde_json::json!({"useSelection": true, "coalesce": coalesce}))?;
+    app.run("layer.removeBackground", serde_json::json!({"useSelection": true, "refineSelection": refined, "coalesce": coalesce}))?;
     Ok(if refined {
         "Background removed with the local object model".into()
     } else if coalesce.is_none() {
@@ -237,10 +237,16 @@ mod tests {
         let service = move |request: crate::semantic_select_ui::Request| {
             observed_for_service.set(Some(request.mode));
             let (sender, receiver) = std::sync::mpsc::channel();
+            let mut alpha = vec![0; request.width as usize * request.height as usize];
+            for y in 5..19 {
+                for x in 8..24 {
+                    alpha[y * request.width as usize + x] = 255;
+                }
+            }
             let _ = sender.send(Ok(SegmentationMask {
                 width: request.width,
                 height: request.height,
-                alpha: vec![255; request.width as usize * request.height as usize],
+                alpha,
                 confidence: Some(0.95),
                 model: ModelIdentity::mobile_sam_tiny(),
             }));
@@ -264,6 +270,9 @@ mod tests {
         let state = app.session.active().unwrap();
         let layer = state.doc.layer(state.active_layer.unwrap()).unwrap();
         assert!(layer.mask.is_some(), "{}", app.ui.status);
+        let mask = &layer.mask.as_ref().unwrap().surface;
+        let soft = (0..24).flat_map(|y| (0..32).map(move |x| mask.sample_channel(x, y, 0))).filter(|coverage| *coverage > 0.0 && *coverage < 1.0).count();
+        assert!(soft > 0, "automatic background removal must refine the model selection at document resolution");
         assert!(state.doc.selection.is_none());
         assert_eq!(state.history.past_len(), history + 1);
         assert_eq!(observed.get(), Some(SegmentationMode::AutomaticSubject));

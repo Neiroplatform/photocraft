@@ -100,9 +100,14 @@ impl MobileSamBackend {
             let point = [model_point(&prompt)];
             let (masks, iou) = self.model.forward_for_embeddings(&embeddings, h, w, &point, true).map_err(|error| MlError::Backend(error.to_string()))?;
             let masks = masks
-                .upsample_nearest2d(
+                // SAM decodes a low-resolution logit grid. Nearest-neighbour
+                // expansion exposes that grid as multi-pixel stairs after a
+                // background-removal mask is applied. Interpolate logits first,
+                // then threshold at the model boundary.
+                .upsample_bilinear2d(
                     candle_transformers::models::segment_anything::sam::IMAGE_SIZE,
                     candle_transformers::models::segment_anything::sam::IMAGE_SIZE,
+                    false,
                 )
                 .and_then(|tensor| tensor.get(0))
                 .and_then(|tensor| tensor.i((.., ..h, ..w)))

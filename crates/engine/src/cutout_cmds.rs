@@ -45,6 +45,7 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let sample_all = p.get("sampleAllLayers").and_then(Value::as_bool).unwrap_or(false);
     let refine = p.get("refine").and_then(Value::as_bool).unwrap_or(true);
+    let refine_selection = p.get("refineSelection").and_then(Value::as_bool).unwrap_or(false);
     crate::jobs::edit_job(
         s,
         "Remove Background",
@@ -52,12 +53,30 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
             if use_selection {
                 let selection =
                     doc.selection.clone().ok_or_else(|| EngineError::Other("the selection changed before Remove Background could apply it".into()))?;
-                let bounds = selection.content_bounds();
+                let mut bounds = selection.content_bounds();
                 if bounds.is_empty() {
                     return Err(EngineError::Other("the active selection is empty".into()));
                 }
+                let mask = if refine_selection {
+                    ctx.progress(0.6, "Refining edge");
+                    let refined = with_doc_sampler(doc, Some(id), sample_all, |sampler, document| {
+                        matting::refine_mask(sampler, &matting::surface_reader(&selection), bounds, document.bounds(), &REFINE)
+                    });
+                    if ctx.cancelled() {
+                        return Err(EngineError::Cancelled);
+                    }
+                    match refined {
+                        Some(region) => {
+                            bounds = region.bbox;
+                            matting::region_surface(&region)
+                        }
+                        None => selection,
+                    }
+                } else {
+                    selection
+                };
                 crate::extra_cmds::background_to_layer_for_mask(doc, id);
-                doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?.mask = Some(LayerMask { surface: selection, ..LayerMask::reveal_all() });
+                doc.layer_mut(id).ok_or(EngineError::NoLayer(id))?.mask = Some(LayerMask { surface: mask, ..LayerMask::reveal_all() });
                 doc.selection = None;
                 return Ok([bounds.x0, bounds.y0, bounds.width() as i32, bounds.height() as i32]);
             }
@@ -94,7 +113,7 @@ pub fn specs() -> Vec<CommandSpec> {
         label: "Remove Background",
         menu: &[],
         shortcut: None,
-        params: r##"{"layer":id?,"sampleAllLayers":bool=false,"refine":bool=true,"useSelection":bool=false} → {layer,bounds} (adds a layer mask from Select Subject, or from the exact active selection when useSelection=true; the Background becomes a normal layer)"##,
+        params: r##"{"layer":id?,"sampleAllLayers":bool=false,"refine":bool=true,"useSelection":bool=false,"refineSelection":bool=false} → {layer,bounds} (adds a layer mask from Select Subject, or from the active selection; refineSelection is opt-in so explicit selections remain exact by default; the Background becomes a normal layer)"##,
         enabled,
         run,
         journal: true,
@@ -233,6 +252,26 @@ mod tests {
         s.execute("edit.undo", json!({})).unwrap();
         assert!(layer(&s, id).mask.is_none());
         assert!(s.active().unwrap().doc.selection.is_some(), "undo restores the selection consumed by the quick action");
+    }
+
+    #[test]
+    fn remove_background_can_refine_a_semantic_selection_without_changing_the_default_contract() {
+        let (mut s, _) = disc(8);
+        let id = active_id(&s);
+        s.execute("select.rect", json!({"x": 55, "y": 35, "width": 90, "height": 90})).unwrap();
+
+        s.execute(CMD, json!({"useSelection": true, "refineSelection": true})).unwrap();
+
+        let mask = &layer(&s, id).mask.as_ref().unwrap().surface;
+        let mut soft = 0usize;
+        for y in 30..130 {
+            for x in 50..150 {
+                let coverage = mask.sample_channel(x, y, 0);
+                soft += usize::from(coverage > 0.0 && coverage < 1.0);
+            }
+        }
+        assert!(soft > 0, "full-resolution semantic refinement must create partial edge coverage");
+        assert!(s.active().unwrap().doc.selection.is_none());
     }
 
     #[test]
