@@ -540,10 +540,19 @@ fn pointer_moves(events: &[egui::Event], button: egui::PointerButton, down_at_st
 /// separate `ModifiersChanged` event, so use them for click gestures before falling back to the
 /// frame-wide modifier state.
 fn pointer_button_modifiers(events: &[egui::Event], button: egui::PointerButton) -> Option<egui::Modifiers> {
-    events.iter().rev().find_map(|e| match e {
-        egui::Event::PointerButton { button: b, modifiers, .. } if *b == button => Some(*modifiers),
-        _ => None,
-    })
+    events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            egui::Event::PointerButton { button: b, pressed: true, modifiers, .. } if *b == button => Some(*modifiers),
+            _ => None,
+        })
+        .or_else(|| {
+            events.iter().rev().find_map(|e| match e {
+                egui::Event::PointerButton { button: b, modifiers, .. } if *b == button => Some(*modifiers),
+                _ => None,
+            })
+        })
 }
 
 /// Abstract tool event, produced by the mouse or by automation (`ui.pointer`).
@@ -4295,6 +4304,22 @@ mod tests {
         // The button was already down when the frame began: the move before the release counts,
         // the one after it does not.
         assert_eq!(pointer_moves(&events, PointerButton::Primary, true), vec![pos2(1.0, 0.0), pos2(3.0, 0.0), pos2(4.0, 0.0)]);
+    }
+
+    #[test]
+    fn click_modifiers_come_from_pointer_down_even_when_release_loses_shift() {
+        use egui::{Event, PointerButton, pos2};
+        let events = [
+            Event::PointerButton {
+                pos: pos2(2.0, 3.0),
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers { shift: true, ..Default::default() },
+            },
+            Event::PointerButton { pos: pos2(2.0, 3.0), button: PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE },
+        ];
+
+        assert!(pointer_button_modifiers(&events, PointerButton::Primary).is_some_and(|mods| mods.shift));
     }
 
     #[test]
