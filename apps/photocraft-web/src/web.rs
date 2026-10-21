@@ -14,6 +14,21 @@ use wasm_bindgen::JsCast as _;
 
 type Inbox = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
 
+type ClipboardImage = (u32, u32, Vec<u8>);
+
+/// Browser paste events expose image files only while the event is being handled. The bytes are
+/// read asynchronously, decoded on the next frame, and then exposed through the synchronous
+/// `Services::clipboard_get_image` boundary used by the editor.
+#[derive(Default)]
+struct BrowserClipboard {
+    request: u64,
+    arrived: Vec<(u64, Result<(String, Vec<u8>), String>)>,
+    image: Option<ClipboardImage>,
+    paste_requested: bool,
+}
+
+type Clipboard = Arc<Mutex<BrowserClipboard>>;
+
 /// Everything File › Open reads: PhotoCraft, Photoshop and Affinity documents, flat images, and
 /// Photoshop brushes (.abr), gradients (.grd) and swatches (.aco, .ase), which go to the preset libraries.
 const OPEN_EXTS: &[&str] = &[
@@ -62,6 +77,7 @@ pub fn start() {
             create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
         }
         let pen_target = canvas.clone();
+        let paste_target = document.clone();
         let result = eframe::WebRunner::new()
             .start(
                 canvas,
@@ -69,11 +85,13 @@ pub fn start() {
                 Box::new(move |cc| {
                     PhotocraftApp::setup_context(&cc.egui_ctx, ThemeKind::Pro);
                     let inbox: Inbox = Arc::default();
+                    let clipboard: Clipboard = Arc::default();
                     let served: Served = Arc::default();
                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
                     let semantic = preload_semantic_model(cc.egui_ctx.clone());
-                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), semantic));
+                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), semantic));
                     listen_pen(&pen_target, app.stylus.feed.clone());
+                    listen_image_paste(&paste_target, clipboard.clone(), cc.egui_ctx.clone());
                     app.set_theme(&cc.egui_ctx, ThemeKind::Pro);
                     if let Some(rs) = cc.wgpu_render_state.clone()
                         && !force_cpu
@@ -83,7 +101,7 @@ pub fn start() {
                     }
                     let unsaved = Arc::new(AtomicBool::new(false));
                     guard_unload(unsaved.clone());
-                    Ok(Box::new(WebShell { app, inbox, unsaved, served }))
+                    Ok(Box::new(WebShell { app, inbox, clipboard, unsaved, served }))
                 }),
             )
             .await;
@@ -94,6 +112,65 @@ pub fn start() {
             }
         }
     });
+}
+
+/// Capture an image placed on the browser clipboard by a screenshot tool or another app. Text
+/// paste is left to egui and focused text fields. Image paste is prevented from becoming a text
+/// event, then completed after the browser has yielded the file bytes.
+fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egui::Context) {
+    use wasm_bindgen::closure::Closure;
+    let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(move |event: web_sys::ClipboardEvent| {
+        let Some(data) = event.clipboard_data() else {
+            return;
+        };
+        let from_files =
+            data.files().and_then(|files| (0..files.length()).filter_map(|index| files.item(index)).find(|file| file.type_().starts_with("image/")));
+        let items = data.items();
+        let from_items = || {
+            (0..items.length())
+                .filter_map(|index| items.get(index))
+                .find(|item| item.kind() == "file" && item.type_().starts_with("image/"))
+                .and_then(|item| item.get_as_file().ok().flatten())
+        };
+        let Some(file) = from_files.or_else(from_items) else { return };
+        event.prevent_default();
+        let name = clipboard_file_name(&file);
+        let request = {
+            let mut state = clipboard.lock().unwrap_or_else(|error| error.into_inner());
+            state.request = state.request.saturating_add(1);
+            state.image = None;
+            state.paste_requested = true;
+            state.request
+        };
+        let clipboard = clipboard.clone();
+        let ctx = ctx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let bytes = wasm_bindgen_futures::JsFuture::from(file.array_buffer())
+                .await
+                .map(|buffer| js_sys::Uint8Array::new(&buffer).to_vec())
+                .map_err(|error| format!("Could not read the pasted image: {error:?}"));
+            clipboard.lock().unwrap_or_else(|error| error.into_inner()).arrived.push((request, bytes.map(|bytes| (name, bytes))));
+            ctx.request_repaint();
+        });
+    });
+    if target.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref()).is_ok() {
+        cb.forget();
+    }
+}
+
+fn clipboard_file_name(file: &web_sys::File) -> String {
+    let name = file.name();
+    if name.contains('.') {
+        return name;
+    }
+    let ext = match file.type_().as_str() {
+        "image/jpeg" => "jpg",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        "image/bmp" => "bmp",
+        _ => "png",
+    };
+    format!("clipboard.{ext}")
 }
 
 /// Pen pressure, tilt, twist and the eraser button from Pointer Events (eframe forwards none of them for pens) into
@@ -253,12 +330,64 @@ fn preload_semantic_model(ctx: egui::Context) -> Option<photocraft_ui_egui::sema
 struct WebShell {
     app: PhotocraftApp,
     inbox: Inbox,
+    clipboard: Clipboard,
     /// Read by the `beforeunload` listener ([`guard_unload`]).
     unsaved: Arc<AtomicBool>,
     served: Served,
 }
 
 impl WebShell {
+    /// Decode only the newest pasted image. Older asynchronous reads cannot replace a later
+    /// clipboard gesture when their promises finish out of order.
+    fn receive_clipboard_image(&mut self) {
+        let (request, arrived) = {
+            let mut state = self.clipboard.lock().unwrap_or_else(|error| error.into_inner());
+            (state.request, std::mem::take(&mut state.arrived))
+        };
+        let Some((_, result)) = arrived.into_iter().rev().find(|(id, _)| *id == request) else { return };
+        let decoded = result.and_then(|(name, bytes)| decode_clipboard_image(&name, &bytes));
+        let mut state = self.clipboard.lock().unwrap_or_else(|error| error.into_inner());
+        if state.request != request {
+            return;
+        }
+        match decoded {
+            Ok(image) => state.image = Some(image),
+            Err(error) => {
+                state.paste_requested = false;
+                self.app.ui.status = error;
+                self.app.ui.status_error = true;
+            }
+        }
+    }
+
+    /// If the key shortcut ran before the asynchronous image read completed, finish that same
+    /// paste now. If it ran after decoding, `clipboard_get_image` already cleared the flag and
+    /// this remains a no-op, preventing a duplicate layer/document.
+    fn finish_clipboard_paste(&mut self, ctx: &egui::Context) {
+        let ready = {
+            let state = self.clipboard.lock().unwrap_or_else(|error| error.into_inner());
+            state.paste_requested && state.image.is_some()
+        };
+        if ready {
+            match photocraft_ui_egui::menus::invoke(&mut self.app, ctx, "edit.paste", serde_json::json!({})) {
+                Ok(result) => {
+                    if let (Some(width), Some(height)) =
+                        (result.get("width").and_then(serde_json::Value::as_u64), result.get("height").and_then(serde_json::Value::as_u64))
+                    {
+                        log::info!("photocraft-web: pasted clipboard image {width}x{height} as a new document");
+                    } else {
+                        log::info!("photocraft-web: pasted clipboard image as a layer");
+                    }
+                }
+                Err(error) => {
+                    self.clipboard.lock().unwrap_or_else(|poison| poison.into_inner()).paste_requested = false;
+                    self.app.ui.status = error;
+                    self.app.ui.status_error = true;
+                }
+            }
+        }
+    }
+
     /// Fetches the served families asked for (picked in a font menu, or needed by a layout) and
     /// installs the files that arrived.
     fn serve_fonts(&mut self, ctx: &egui::Context) {
@@ -309,8 +438,10 @@ impl eframe::App for WebShell {
                 }
             });
         }
+        self.receive_clipboard_image();
         self.serve_fonts(ctx);
         self.app.logic(ctx, frame);
+        self.finish_clipboard_paste(ctx);
         self.unsaved.store(self.app.has_unsaved_work(), Ordering::Relaxed);
     }
 
@@ -319,7 +450,15 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox, semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>) -> Services {
+fn services(inbox: Inbox, clipboard: Clipboard, semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>) -> Services {
+    let clipboard_get_image = Some(Box::new(move || {
+        let mut state = clipboard.lock().unwrap_or_else(|error| error.into_inner());
+        let image = state.image.clone();
+        if image.is_some() {
+            state.paste_requested = false;
+        }
+        image
+    }) as photocraft_ui_egui::ClipboardGetFn);
     Services {
         screen_pick: screen_color_service(),
         semantic_select,
@@ -359,11 +498,28 @@ fn services(inbox: Inbox, semantic_select: Option<photocraft_ui_egui::semantic_s
             photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &EncodeOptions::default()).map_err(|e| e.to_string())
         })),
         inbox: Some(inbox),
+        clipboard_get_image,
         // Preferences live in the browser's localStorage.
         load_prefs: Some(Box::new(|| local_storage()?.get_item(PREFS_KEY).ok().flatten())),
         save_prefs: Some(Box::new(|text: &str| local_storage().ok_or("no localStorage")?.set_item(PREFS_KEY, text).map_err(|e| format!("{e:?}")))),
         ..Default::default()
     }
+}
+
+/// Decode a browser clipboard image through the same image importer as File › Open, then flatten
+/// it to the RGBA8 contract expected by the editor's platform clipboard boundary.
+fn decode_clipboard_image(name: &str, bytes: &[u8]) -> Result<ClipboardImage, String> {
+    let document = photocraft_io::import(name, bytes).map_err(|error| format!("Could not paste {name}: {error}"))?.document;
+    let bounds = document.bounds();
+    let (width, height) = (bounds.width(), bounds.height());
+    let count = usize::try_from(width)
+        .ok()
+        .and_then(|width| usize::try_from(height).ok().and_then(|height| width.checked_mul(height)))
+        .ok_or_else(|| "The pasted image is too large".to_string())?;
+    let surface = photocraft_compose::flatten_to_surface(&document, document.pixel_format(), None);
+    let mut pixels = vec![[0u8; 4]; count];
+    surface.read_rgba8_into(bounds, &mut pixels);
+    Ok((width, height, pixels.into_iter().flatten().collect()))
 }
 
 const PREFS_KEY: &str = "photocraft.preferences";

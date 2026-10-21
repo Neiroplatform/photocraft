@@ -9362,6 +9362,7 @@
         "pkg:cargo/js-sys@0.3.106",
         "pkg:cargo/log@0.4.34",
         "pkg:cargo/photocraft-codecs@0.5.0",
+        "pkg:cargo/photocraft-compose@0.5.0",
         "pkg:cargo/photocraft-doc@0.5.0",
         "pkg:cargo/photocraft-engine@0.5.0",
         "pkg:cargo/photocraft-io@0.5.0",
@@ -9369,6 +9370,7 @@
         "pkg:cargo/photocraft-ui-egui@0.5.0",
         "pkg:cargo/rfd@0.17.2",
         "pkg:cargo/serde-wasm-bindgen@0.6.5",
+        "pkg:cargo/serde_json@1.0.151",
         "pkg:cargo/wasm-bindgen-futures@0.4.79",
         "pkg:cargo/wasm-bindgen@0.2.129",
         "pkg:cargo/web-sys@0.3.106"
@@ -10578,7 +10580,7 @@
     "properties": [
       {
         "name": "photocraft:cargo-lock-sha256",
-        "value": "ab09f84a7d1296fb302787750f6dfed99c26df88393ce095108c62f4aff87d92"
+        "value": "b18d99c3e5061018694ecea3ba09127c11a99f607eccc429a589e2bdaa77916a"
       },
       {
         "name": "photocraft:target",
