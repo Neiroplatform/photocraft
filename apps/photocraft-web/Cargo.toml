@@ -35,6 +35,7 @@ photocraft-ui-egui = { workspace = true }
 egui = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
+base64 = "0.22"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback.
@@ -44,4 +45,4 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.6"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Window", "Navigator", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "ClipboardEvent", "DataTransfer", "DataTransferItem", "DataTransferItemList", "File", "FileList", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "Worker", "MessageEvent", "ErrorEvent", "DedicatedWorkerGlobalScope", "console"] }
+web-sys = { version = "0.3", features = ["Window", "Navigator", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "ClipboardEvent", "DataTransfer", "DataTransferItem", "DataTransferItemList", "File", "FileList", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Headers", "Request", "RequestInit", "Response", "Worker", "MessageEvent", "ErrorEvent", "DedicatedWorkerGlobalScope", "console"] }

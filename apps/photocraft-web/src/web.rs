@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use base64::Engine as _;
 use photocraft_codecs::{ChannelLayout, EncodeOptions, Image};
 use photocraft_doc::Document;
 use photocraft_engine::Session;
@@ -89,7 +90,8 @@ pub fn start() {
                     let served: Served = Arc::default();
                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
                     let semantic = preload_semantic_model(cc.egui_ctx.clone());
-                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), semantic));
+                    let cloud_ai = cloud_ai_service(cc.egui_ctx.clone());
+                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), semantic, cloud_ai));
                     listen_pen(&pen_target, app.stylus.feed.clone());
                     listen_image_paste(&paste_target, clipboard.clone(), cc.egui_ctx.clone());
                     app.set_theme(&cc.egui_ctx, ThemeKind::Pro);
@@ -325,6 +327,66 @@ fn preload_semantic_model(ctx: egui::Context) -> Option<photocraft_ui_egui::sema
     }))
 }
 
+/// Same-origin cloud edit boundary. The browser never receives provider
+/// credentials: it sends the user-authorized PNG payload to the product
+/// gateway, which enforces model, size, origin, rate and concurrency policy.
+fn cloud_ai_service(ctx: egui::Context) -> Option<photocraft_ui_egui::cloud_ai_edit_ui::Service> {
+    use std::sync::mpsc;
+
+    Some(Box::new(move |request| {
+        let (sender, receiver) = mpsc::channel();
+        let wake = ctx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = request_cloud_ai(request).await;
+            let _ = sender.send(result);
+            wake.request_repaint();
+        });
+        Ok(receiver)
+    }))
+}
+
+async fn request_cloud_ai(request: photocraft_ui_egui::cloud_ai_edit_ui::Request) -> Result<photocraft_ui_egui::cloud_ai_edit_ui::Response, String> {
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_futures::JsFuture;
+
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&request.image_png);
+    let mask = request.mask_png.as_ref().map(|value| base64::engine::general_purpose::STANDARD.encode(value));
+    let body = serde_json::to_string(&serde_json::json!({
+        "operation": request.kind,
+        "prompt": request.prompt,
+        "image_base64": encoded,
+        "mask_base64": mask,
+    }))
+    .map_err(|error| error.to_string())?;
+    let init = web_sys::RequestInit::new();
+    init.set_method("POST");
+    init.set_body(&JsValue::from_str(&body));
+    let web_request =
+        web_sys::Request::new_with_str_and_init("/api/pixelle/v1/edit", &init).map_err(|error| format!("Could not prepare cloud edit: {error:?}"))?;
+    web_request.headers().set("content-type", "application/json").map_err(|error| format!("Could not prepare cloud edit headers: {error:?}"))?;
+    let window = web_sys::window().ok_or_else(|| "No browser window is available".to_string())?;
+    let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&web_request))
+        .await
+        .map_err(|error| format!("Cloud edit request failed: {error:?}"))?
+        .dyn_into()
+        .map_err(|_| "Cloud edit returned an invalid response".to_string())?;
+    let text = JsFuture::from(response.text().map_err(|error| format!("Could not read cloud edit response: {error:?}"))?)
+        .await
+        .map_err(|error| format!("Could not read cloud edit response: {error:?}"))?
+        .as_string()
+        .ok_or_else(|| "Cloud edit response was not text".to_string())?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|_| format!("Cloud edit returned HTTP {} with an invalid response", response.status()))?;
+    if !response.ok() {
+        let message = value.get("error").and_then(serde_json::Value::as_str).unwrap_or("Cloud edit failed");
+        return Err(format!("{message} (HTTP {})", response.status()));
+    }
+    let image = value.get("image_base64").and_then(serde_json::Value::as_str).ok_or_else(|| "Cloud edit response did not contain an image".to_string())?;
+    let image_png = base64::engine::general_purpose::STANDARD.decode(image).map_err(|_| "Cloud edit response contained invalid image data".to_string())?;
+    let model = value.get("model").and_then(serde_json::Value::as_str).unwrap_or("configured model").to_string();
+    Ok(photocraft_ui_egui::cloud_ai_edit_ui::Response { image_png, model })
+}
+
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
 /// so the app's own drop path can't handle them) and feed them through the inbox.
 struct WebShell {
@@ -450,7 +512,12 @@ impl eframe::App for WebShell {
     }
 }
 
-fn services(inbox: Inbox, clipboard: Clipboard, semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>) -> Services {
+fn services(
+    inbox: Inbox,
+    clipboard: Clipboard,
+    semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>,
+    cloud_ai_edit: Option<photocraft_ui_egui::cloud_ai_edit_ui::Service>,
+) -> Services {
     let clipboard_get_image = Some(Box::new(move || {
         let mut state = clipboard.lock().unwrap_or_else(|error| error.into_inner());
         let image = state.image.clone();
@@ -462,6 +529,7 @@ fn services(inbox: Inbox, clipboard: Clipboard, semantic_select: Option<photocra
     Services {
         screen_pick: screen_color_service(),
         semantic_select,
+        cloud_ai_edit,
         import: Some(Box::new(|name: &str, bytes: &[u8]| photocraft_io::import(name, bytes).map(|r| (r.document, r.warnings)).map_err(|e| e.to_string()))),
         export: Some(Box::new(|doc: &Document, path: &str, settings: &photocraft_ui_egui::ExportSettings| {
             let mut opts = photocraft_io::ExportOptions::default();

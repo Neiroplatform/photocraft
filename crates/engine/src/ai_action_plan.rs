@@ -25,6 +25,16 @@ pub enum ActionIntent {
     Sharpen,
     Resize { width: u32, height: u32 },
     ExpandCanvas { width: u32, height: u32 },
+    CloudEdit(CloudEditKind),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloudEditKind {
+    ReplaceBackground,
+    Relight,
+    Restyle,
+    GenerativeFill,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +55,7 @@ impl Session {
         let state = self.active().ok_or(EngineError::NoDocument)?;
         let intent = classify(prompt).map_err(EngineError::Other)?.ok_or_else(|| {
             EngineError::Other(
-                "Supported local edits: remove or blur background, remove or copy a selected object, auto enhance, denoise, sharpen, resize, and expand canvas.".into(),
+                "Supported edits: remove, blur or replace a background; remove or copy a selected object; auto enhance, denoise, sharpen, resize, expand canvas, relight, restyle, and generative fill.".into(),
             )
         })?;
         Ok(ActionPlan { version: ACTION_PLAN_VERSION, document: state.doc.id, revision: state.revision, intent })
@@ -99,6 +109,14 @@ fn classify(prompt: &str) -> std::result::Result<Option<ActionIntent>, String> {
         Ok(Some(ActionIntent::RemoveBackground))
     } else if background && (value.contains("разм") || value.contains("блюр") || value.contains("blur")) {
         Ok(Some(ActionIntent::BlurBackground))
+    } else if background
+        && (value.contains("замен")
+            || value.contains("измени фон")
+            || value.contains("поменяй фон")
+            || value.contains("replace background")
+            || value.contains("change background"))
+    {
+        Ok(Some(ActionIntent::CloudEdit(CloudEditKind::ReplaceBackground)))
     } else if value.contains("скопир") || value.contains("copy selection") || value.contains("copy selected") {
         Ok(Some(ActionIntent::CopySelection))
     } else if (value.contains("удал") || value.contains("убер") || value.contains("remove") || value.contains("delete"))
@@ -131,6 +149,13 @@ fn classify(prompt: &str) -> std::result::Result<Option<ActionIntent>, String> {
         || value.contains("auto correct")
     {
         Ok(Some(ActionIntent::AutoEnhance))
+    } else if value.contains("освещ") || value.contains("свет на фото") || value.contains("relight") || value.contains("change lighting") {
+        Ok(Some(ActionIntent::CloudEdit(CloudEditKind::Relight)))
+    } else if value.contains("в стиле") || value.contains("стилиз") || value.contains("restyle") || value.contains("in the style") {
+        Ok(Some(ActionIntent::CloudEdit(CloudEditKind::Restyle)))
+    } else if value.contains("дорис") || value.contains("заполни выдел") || value.contains("generative fill") || value.contains("fill selection")
+    {
+        Ok(Some(ActionIntent::CloudEdit(CloudEditKind::GenerativeFill)))
     } else {
         Ok(None)
     }
@@ -160,6 +185,10 @@ mod tests {
             ("sharpen image", ActionIntent::Sharpen),
             ("изменить размер на 1200×800", ActionIntent::Resize { width: 1200, height: 800 }),
             ("expand canvas to 1920x1080", ActionIntent::ExpandCanvas { width: 1920, height: 1080 }),
+            ("замени фон на студийный", ActionIntent::CloudEdit(CloudEditKind::ReplaceBackground)),
+            ("измени освещение на закатное", ActionIntent::CloudEdit(CloudEditKind::Relight)),
+            ("сделай в стиле акварели", ActionIntent::CloudEdit(CloudEditKind::Restyle)),
+            ("дорисуй выделенную область", ActionIntent::CloudEdit(CloudEditKind::GenerativeFill)),
         ];
         for (prompt, expected) in cases {
             assert_eq!(session.plan_ai_action(prompt).unwrap().intent, expected, "{prompt}");

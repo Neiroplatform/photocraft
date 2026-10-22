@@ -939,6 +939,10 @@ pub struct UiState {
     /// Local AI edit prompt shown in Object Selection's contextual options.
     #[serde(default)]
     pub ai_prompt: String,
+    /// User acknowledgement for an edit that sends flattened pixels to the
+    /// configured cloud provider. Off by default and persisted as a UI choice.
+    #[serde(skip)]
+    pub ai_cloud_consent: bool,
     /// The status message is an error (shown in the warning colour).
     #[serde(default)]
     pub status_error: bool,
@@ -1017,6 +1021,7 @@ impl Default for UiState {
             next_id: 1,
             status: String::new(),
             ai_prompt: String::new(),
+            ai_cloud_consent: false,
             status_error: false,
             notices: Vec::new(),
             gpu_fallback_notice: None,

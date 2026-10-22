@@ -124,6 +124,7 @@ fn execute(app: &mut PhotocraftApp, intent: Intent, refined: bool, coalesce: Opt
             serde_json::json!({"width": width, "height": height, "anchor": "center", "extensionColor": "transparent"}),
             &format!("Canvas expanded locally to {width}×{height}"),
         ),
+        Intent::CloudEdit(_) => Err("Cloud edits must use the asynchronous image service".into()),
     }
 }
 
@@ -133,9 +134,13 @@ fn after(intent: Intent, key: String) -> crate::semantic_select_ui::AfterApply {
         Intent::RemoveBackground => AfterApply::RemoveBackground(key),
         Intent::BlurBackground => AfterApply::BlurBackground(key),
         Intent::CopySelection => AfterApply::CopySelection(key),
-        Intent::RemoveObject | Intent::AutoEnhance | Intent::Denoise | Intent::Sharpen | Intent::Resize { .. } | Intent::ExpandCanvas { .. } => {
-            AfterApply::Nothing
-        }
+        Intent::RemoveObject
+        | Intent::AutoEnhance
+        | Intent::Denoise
+        | Intent::Sharpen
+        | Intent::Resize { .. }
+        | Intent::ExpandCanvas { .. }
+        | Intent::CloudEdit(_) => AfterApply::Nothing,
     }
 }
 
@@ -187,6 +192,16 @@ pub fn run_prompt(app: &mut PhotocraftApp) {
         return;
     }
     let intent = plan.intent;
+    if let Intent::CloudEdit(kind) = intent {
+        if !app.ui.ai_cloud_consent {
+            finish(app, Err("Enable ‘Cloud AI (sends image pixels)’ before running this edit.".into()));
+            return;
+        }
+        if let Err(error) = crate::cloud_ai_edit_ui::start(app, plan, kind, prompt) {
+            finish(app, Err(error));
+        }
+        return;
+    }
     if matches!(intent, Intent::AutoEnhance | Intent::Denoise | Intent::Sharpen | Intent::Resize { .. } | Intent::ExpandCanvas { .. }) {
         let result = execute(app, intent, false, None);
         finish(app, result);
@@ -299,6 +314,31 @@ mod tests {
         run_prompt(&mut app);
         assert_eq!(app.session.active().unwrap().doc.size, photocraft_geom::Size::new(30, 18));
         assert!(!app.ui.status_error, "{}", app.ui.status);
+    }
+
+    #[test]
+    fn cloud_edit_requires_consent_and_dispatches_only_after_opt_in() {
+        let calls = Rc::new(Cell::new(0));
+        let observed = calls.clone();
+        let service = move |_request: crate::cloud_ai_edit_ui::Request| {
+            observed.set(observed.get() + 1);
+            let (_sender, receiver) = std::sync::mpsc::channel();
+            Ok(receiver)
+        };
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
+        app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        let history = app.session.active().unwrap().history.past_len();
+        app.ui.ai_prompt = "замени фон на студийный".into();
+        run_prompt(&mut app);
+        assert_eq!(calls.get(), 0);
+        assert!(app.ui.status_error);
+        assert!(app.ui.status.contains("sends image pixels"));
+
+        app.ui.ai_cloud_consent = true;
+        run_prompt(&mut app);
+        assert_eq!(calls.get(), 1);
+        assert!(crate::cloud_ai_edit_ui::is_pending(&app));
+        assert_eq!(app.session.active().unwrap().history.past_len(), history);
     }
 
     #[test]

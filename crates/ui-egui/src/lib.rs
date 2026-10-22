@@ -41,6 +41,7 @@ pub mod channels_panel;
 pub mod chrome_ui;
 pub mod cjk_fonts;
 pub mod clip_line_ui;
+pub mod cloud_ai_edit_ui;
 pub mod color_picker_ui;
 pub mod color_range_ui;
 pub mod comps_ui;
@@ -258,6 +259,10 @@ pub struct Services {
     /// immutable model as soon as the editor starts; tests and other shells can
     /// inject the same typed boundary without giving UI code model ownership.
     pub semantic_select: Option<semantic_select_ui::Service>,
+    /// Explicit, server-mediated generative image edits. Credentials stay in
+    /// the platform shell; this boundary carries only bounded PNG inputs and
+    /// a revision-bound reply.
+    pub cloud_ai_edit: Option<cloud_ai_edit_ui::Service>,
     /// Decode a file's bytes into a document (PSD, PNG, JPEG, …).
     pub import: Option<ImportFn>,
     /// Encode a document for a file name (format chosen by extension).
@@ -337,6 +342,8 @@ pub struct PhotocraftApp {
     /// Inference reply waiting outside the UI thread, bound to the document
     /// revision that produced its preview.
     pub(crate) semantic_select_pending: Option<semantic_select_ui::Pending>,
+    /// Generative edit reply waiting for the exact source revision.
+    pub(crate) cloud_ai_edit_pending: Option<cloud_ai_edit_ui::Pending>,
     /// Canvas caches per (document, display): CPU textures hold monitor values; the GPU
     /// canvas state is shared (`canvas::GPU_OUTPUT`).
     canvases: HashMap<(DocId, u32), canvas::CanvasCache>,
@@ -525,6 +532,7 @@ impl PhotocraftApp {
             ui: UiState::default(),
             services,
             semantic_select_pending: None,
+            cloud_ai_edit_pending: None,
             canvases: HashMap::new(),
             navigator_textures: HashMap::new(),
             monitors: Default::default(),
@@ -1088,6 +1096,10 @@ impl eframe::App for PhotocraftApp {
         self.last_frame_time = now;
         self.sync_views();
         semantic_select_ui::poll(self);
+        cloud_ai_edit_ui::poll(self);
+        if cloud_ai_edit_ui::is_pending(self) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         self.check_gpu(ctx);
         #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
         if self.live_tokens.poll(ctx, self.ui.theme) {

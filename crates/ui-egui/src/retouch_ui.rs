@@ -363,7 +363,11 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
             crate::widgets::checkbox(ui, &mut o.sample_all_layers, tl!("Sample All Layers"));
             opt(ui, tl!("Click an object (local AI), or drag a rectangle"));
             crate::widgets::vline(ui, 22.0);
-            if crate::semantic_select_ui::is_pending(app) {
+            if crate::cloud_ai_edit_ui::is_pending(app) {
+                if crate::widgets::secondary_button(ui, tl!("Cancel AI edit"), 0.0).clicked() {
+                    crate::cloud_ai_edit_ui::cancel(app);
+                }
+            } else if crate::semantic_select_ui::is_pending(app) {
                 if crate::widgets::secondary_button(ui, tl!("Cancel"), 0.0).clicked() {
                     crate::semantic_select_ui::cancel(app);
                 }
@@ -372,9 +376,12 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
             }
             crate::widgets::vline(ui, 22.0);
             let response = ui.add_sized([220.0, 24.0], egui::TextEdit::singleline(&mut app.ui.ai_prompt).hint_text(tl!("Describe an edit…")));
+            if app.services.cloud_ai_edit.is_some() {
+                crate::widgets::checkbox(ui, &mut app.ui.ai_cloud_consent, tl!("Cloud AI (sends image pixels)"));
+            }
             let submit = crate::widgets::secondary_button(ui, tl!("Run AI edit"), 0.0).clicked()
                 || (response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)));
-            if submit && !crate::semantic_select_ui::is_pending(app) {
+            if submit && !crate::semantic_select_ui::is_pending(app) && !crate::cloud_ai_edit_ui::is_pending(app) {
                 crate::ai_edit_ui::run_prompt(app);
             }
         }
