@@ -2696,3 +2696,5 @@ fontWeight	Italic	Italique
 	Click an object (local AI), or drag a rectangle	Cliquez sur un objet (IA locale) ou faites glisser un rectangle
 	Describe an edit…	Décrivez une modification…
 	Run AI edit	Exécuter la modification IA
+	Cancel AI edit	Annuler la modification IA
+	Cloud AI (sends image pixels)	IA cloud (envoie les pixels de l’image)

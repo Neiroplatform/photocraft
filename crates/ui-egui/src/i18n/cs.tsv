@@ -2275,3 +2275,5 @@ fontWeight	Italic	Kurzíva
 	Click an object (local AI), or drag a rectangle	Klikněte na objekt (místní AI) nebo přetáhněte obdélník
 	Describe an edit…	Popište úpravu…
 	Run AI edit	Spustit úpravu pomocí AI
+	Cancel AI edit	Zrušit úpravu pomocí AI
+	Cloud AI (sends image pixels)	Cloudová AI (odesílá obrazové pixely)

@@ -2313,3 +2313,5 @@ fontWeight	Italic	Kursiv
 	Click an object (local AI), or drag a rectangle	Objekt anklicken (lokale KI) oder ein Rechteck ziehen
 	Describe an edit…	Bearbeitung beschreiben…
 	Run AI edit	KI-Bearbeitung ausführen
+	Cancel AI edit	KI-Bearbeitung abbrechen
+	Cloud AI (sends image pixels)	Cloud-KI (sendet Bildpixel)

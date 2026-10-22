@@ -2854,3 +2854,5 @@ fontWeight	Italic	기울임
 	Click an object (local AI), or drag a rectangle	객체를 클릭(로컬 AI)하거나 사각형을 드래그하세요
 	Describe an edit…	편집 내용 설명…
 	Run AI edit	AI 편집 실행
+	Cancel AI edit	AI 편집 취소
+	Cloud AI (sends image pixels)	클라우드 AI(이미지 픽셀 전송)

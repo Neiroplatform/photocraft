@@ -3383,3 +3383,5 @@ cameraRaw	Masking	Маскування
 	Click an object (local AI), or drag a rectangle	Клацніть об’єкт (локальний ШІ) або протягніть прямокутник
 	Describe an edit…	Опишіть зміну…
 	Run AI edit	Виконати ШІ-редагування
+	Cancel AI edit	Скасувати ШІ-редагування
+	Cloud AI (sends image pixels)	Хмарний ШІ (надсилає пікселі зображення)

@@ -2283,3 +2283,5 @@ fontWeight	Italic	斜体
 	Click an object (local AI), or drag a rectangle	单击对象（本地 AI），或拖动矩形框
 	Describe an edit…	描述编辑内容…
 	Run AI edit	运行 AI 编辑
+	Cancel AI edit	取消 AI 编辑
+	Cloud AI (sends image pixels)	云端 AI（发送图像像素）

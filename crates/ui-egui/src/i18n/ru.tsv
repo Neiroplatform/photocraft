@@ -2547,3 +2547,5 @@ fontWeight	Italic	Курсив
 	Click an object (local AI), or drag a rectangle	Щёлкните по объекту (локальный ИИ) или протяните прямоугольник
 	Describe an edit…	Опишите изменение…
 	Run AI edit	Выполнить ИИ-правку
+	Cancel AI edit	Отменить ИИ-правку
+	Cloud AI (sends image pixels)	Облачный ИИ (отправляет пиксели изображения)
