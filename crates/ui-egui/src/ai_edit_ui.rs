@@ -67,6 +67,19 @@ fn copy_selection(app: &mut PhotocraftApp) -> Result<String, String> {
     Ok("Selected object copied".into())
 }
 
+fn remove_object(app: &mut PhotocraftApp) -> Result<String, String> {
+    if !has_selection(app) {
+        return Err("Select the unwanted object first, then run the prompt again.".into());
+    }
+    app.run("edit.deleteAndFillSelection", serde_json::json!({}))?;
+    Ok("Selected object removed with local content-aware fill".into())
+}
+
+fn run_local_command(app: &mut PhotocraftApp, command: &str, params: serde_json::Value, message: &str) -> Result<String, String> {
+    app.run(command, params)?;
+    Ok(message.into())
+}
+
 fn blur_background(app: &mut PhotocraftApp, coalesce: Option<&str>) -> Result<String, String> {
     let key = coalesce.map(str::to_owned).unwrap_or_else(|| format!("ai-blur-background-{}", app.ui.alloc_id()));
     let params = |extra: serde_json::Value| {
@@ -88,6 +101,29 @@ fn execute(app: &mut PhotocraftApp, intent: Intent, refined: bool, coalesce: Opt
         Intent::RemoveBackground => remove_background(app, refined, coalesce),
         Intent::BlurBackground => blur_background(app, coalesce),
         Intent::CopySelection => copy_selection(app),
+        Intent::RemoveObject => remove_object(app),
+        Intent::AutoEnhance => run_local_command(app, "image.autoColor", serde_json::json!({}), "Image enhanced locally"),
+        Intent::Denoise => run_local_command(
+            app,
+            "filter.noise.reduceNoise",
+            serde_json::json!({"strength": 6, "preserveDetails": 60, "reduceColorNoise": 45, "sharpenDetails": 25}),
+            "Noise reduced locally",
+        ),
+        Intent::Sharpen => {
+            run_local_command(app, "filter.sharpen.smartSharpen", serde_json::json!({"amount": 100, "radius": 1, "reduceNoise": 10}), "Image sharpened locally")
+        }
+        Intent::Resize { width, height } => run_local_command(
+            app,
+            "image.imageSize",
+            serde_json::json!({"width": width, "height": height, "resample": "preserveDetails"}),
+            &format!("Image resized locally to {width}×{height}"),
+        ),
+        Intent::ExpandCanvas { width, height } => run_local_command(
+            app,
+            "image.canvasSize",
+            serde_json::json!({"width": width, "height": height, "anchor": "center", "extensionColor": "transparent"}),
+            &format!("Canvas expanded locally to {width}×{height}"),
+        ),
     }
 }
 
@@ -97,6 +133,9 @@ fn after(intent: Intent, key: String) -> crate::semantic_select_ui::AfterApply {
         Intent::RemoveBackground => AfterApply::RemoveBackground(key),
         Intent::BlurBackground => AfterApply::BlurBackground(key),
         Intent::CopySelection => AfterApply::CopySelection(key),
+        Intent::RemoveObject | Intent::AutoEnhance | Intent::Denoise | Intent::Sharpen | Intent::Resize { .. } | Intent::ExpandCanvas { .. } => {
+            AfterApply::Nothing
+        }
     }
 }
 
@@ -148,6 +187,15 @@ pub fn run_prompt(app: &mut PhotocraftApp) {
         return;
     }
     let intent = plan.intent;
+    if matches!(intent, Intent::AutoEnhance | Intent::Denoise | Intent::Sharpen | Intent::Resize { .. } | Intent::ExpandCanvas { .. }) {
+        let result = execute(app, intent, false, None);
+        finish(app, result);
+        return;
+    }
+    if intent == Intent::RemoveObject && !has_selection(app) {
+        finish(app, Err("Select the unwanted object first, then run the prompt again.".into()));
+        return;
+    }
     if has_selection(app) {
         let result = execute(app, intent, false, None);
         finish(app, result);
@@ -206,6 +254,51 @@ mod tests {
         run_prompt(&mut app);
         assert_eq!(app.session.active().unwrap().revision, revision);
         assert!(app.ui.status_error);
+    }
+
+    #[test]
+    fn remove_object_requires_a_selection_and_never_selects_the_subject_automatically() {
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services::default());
+        app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        let revision = app.session.active().unwrap().revision;
+        app.ui.ai_prompt = "удали ненужный объект".into();
+        run_prompt(&mut app);
+        assert_eq!(app.session.active().unwrap().revision, revision);
+        assert!(app.ui.status_error);
+        assert!(app.ui.status.contains("Select the unwanted object"));
+    }
+
+    #[test]
+    fn selected_object_is_removed_in_one_local_history_step() {
+        let mut app = selected_app();
+        let history = app.session.active().unwrap().history.past_len();
+        app.ui.ai_prompt = "remove selected object".into();
+        run_prompt(&mut app);
+        assert_eq!(app.session.active().unwrap().history.past_len(), history + 1);
+        assert!(!app.ui.status_error, "{}", app.ui.status);
+        assert!(app.ui.status.contains("content-aware fill"));
+    }
+
+    #[test]
+    fn document_wide_local_actions_skip_subject_selection() {
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services::default());
+        app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        let history = app.session.active().unwrap().history.past_len();
+        app.ui.ai_prompt = "улучши фото".into();
+        run_prompt(&mut app);
+        assert_eq!(app.session.active().unwrap().history.past_len(), history + 1);
+        assert!(app.session.active().unwrap().doc.selection.is_none());
+        assert!(!app.ui.status_error, "{}", app.ui.status);
+
+        app.ui.ai_prompt = "изменить размер на 20x10".into();
+        run_prompt(&mut app);
+        assert_eq!(app.session.active().unwrap().doc.size, photocraft_geom::Size::new(20, 10));
+        assert!(!app.ui.status_error, "{}", app.ui.status);
+
+        app.ui.ai_prompt = "расширь холст до 30x18".into();
+        run_prompt(&mut app);
+        assert_eq!(app.session.active().unwrap().doc.size, photocraft_geom::Size::new(30, 18));
+        assert!(!app.ui.status_error, "{}", app.ui.status);
     }
 
     #[test]

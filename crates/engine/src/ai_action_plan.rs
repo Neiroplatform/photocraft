@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{EngineError, Result, Session};
 
-pub const ACTION_PLAN_VERSION: u8 = 1;
+pub const ACTION_PLAN_VERSION: u8 = 2;
 const MAX_PROMPT_BYTES: usize = 512;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +19,12 @@ pub enum ActionIntent {
     RemoveBackground,
     BlurBackground,
     CopySelection,
+    RemoveObject,
+    AutoEnhance,
+    Denoise,
+    Sharpen,
+    Resize { width: u32, height: u32 },
+    ExpandCanvas { width: u32, height: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,8 +43,10 @@ impl Session {
             return Err(EngineError::Other(format!("AI edit prompt exceeds the {MAX_PROMPT_BYTES}-byte local limit")));
         }
         let state = self.active().ok_or(EngineError::NoDocument)?;
-        let intent = classify(prompt).ok_or_else(|| {
-            EngineError::Other("This local AI harness currently supports: remove background, blur background, and copy the selected object.".into())
+        let intent = classify(prompt).map_err(EngineError::Other)?.ok_or_else(|| {
+            EngineError::Other(
+                "Supported local edits: remove or blur background, remove or copy a selected object, auto enhance, denoise, sharpen, resize, and expand canvas.".into(),
+            )
         })?;
         Ok(ActionPlan { version: ACTION_PLAN_VERSION, document: state.doc.id, revision: state.revision, intent })
     }
@@ -57,7 +65,27 @@ impl Session {
     }
 }
 
-fn classify(prompt: &str) -> Option<ActionIntent> {
+fn dimensions(value: &str) -> Option<(u32, u32)> {
+    let normalized = value.replace('×', "x").replace("х", "x").replace("на", "x");
+    for (index, ch) in normalized.char_indices() {
+        if ch != 'x' {
+            continue;
+        }
+        let left = normalized[..index].trim_end();
+        let right = normalized[index + 1..].trim_start();
+        let width_text = left.rsplit(|ch: char| !ch.is_ascii_digit()).next().unwrap_or("");
+        let height_text = right.split(|ch: char| !ch.is_ascii_digit()).next().unwrap_or("");
+        if let (Ok(width), Ok(height)) = (width_text.parse::<u32>(), height_text.parse::<u32>())
+            && width > 0
+            && height > 0
+        {
+            return Some((width, height));
+        }
+    }
+    None
+}
+
+fn classify(prompt: &str) -> std::result::Result<Option<ActionIntent>, String> {
     let value = prompt.trim().to_lowercase().replace('ё', "е");
     let background = value.contains("фон") || value.contains("background");
     if background
@@ -68,13 +96,43 @@ fn classify(prompt: &str) -> Option<ActionIntent> {
             || value.contains("delete")
             || value.contains("cut out"))
     {
-        Some(ActionIntent::RemoveBackground)
+        Ok(Some(ActionIntent::RemoveBackground))
     } else if background && (value.contains("разм") || value.contains("блюр") || value.contains("blur")) {
-        Some(ActionIntent::BlurBackground)
+        Ok(Some(ActionIntent::BlurBackground))
     } else if value.contains("скопир") || value.contains("copy selection") || value.contains("copy selected") {
-        Some(ActionIntent::CopySelection)
+        Ok(Some(ActionIntent::CopySelection))
+    } else if (value.contains("удал") || value.contains("убер") || value.contains("remove") || value.contains("delete"))
+        && (value.contains("объект")
+            || value.contains("предмет")
+            || value.contains("выдел")
+            || value.contains("object")
+            || value.contains("item")
+            || value.contains("selection"))
+    {
+        Ok(Some(ActionIntent::RemoveObject))
+    } else if value.contains("расшир") || value.contains("expand canvas") || value.contains("canvas expand") {
+        dimensions(&value)
+            .map(|(width, height)| ActionIntent::ExpandCanvas { width, height })
+            .map(Some)
+            .ok_or_else(|| "Canvas expansion needs a target size, for example: «расширь холст до 1920x1080».".into())
+    } else if value.contains("размер") || value.contains("resize") || value.contains("scale image") {
+        dimensions(&value)
+            .map(|(width, height)| ActionIntent::Resize { width, height })
+            .map(Some)
+            .ok_or_else(|| "Resize needs a target size, for example: «изменить размер на 1200x800».".into())
+    } else if value.contains("шум") || value.contains("denoise") || value.contains("reduce noise") {
+        Ok(Some(ActionIntent::Denoise))
+    } else if value.contains("резк") || value.contains("четк") || value.contains("sharpen") || value.contains("unblur") {
+        Ok(Some(ActionIntent::Sharpen))
+    } else if value.contains("улуч")
+        || value.contains("автокорр")
+        || value.contains("enhance")
+        || value.contains("auto color")
+        || value.contains("auto correct")
+    {
+        Ok(Some(ActionIntent::AutoEnhance))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -92,10 +150,28 @@ mod tests {
     #[test]
     fn russian_and_english_prompts_map_only_to_the_closed_allowlist() {
         let session = session();
-        assert_eq!(session.plan_ai_action("убрать фон").unwrap().intent, ActionIntent::RemoveBackground);
-        assert_eq!(session.plan_ai_action("размой фон").unwrap().intent, ActionIntent::BlurBackground);
-        assert_eq!(session.plan_ai_action("copy selected object").unwrap().intent, ActionIntent::CopySelection);
+        let cases = [
+            ("убрать фон", ActionIntent::RemoveBackground),
+            ("размой фон", ActionIntent::BlurBackground),
+            ("copy selected object", ActionIntent::CopySelection),
+            ("удали выделенный объект", ActionIntent::RemoveObject),
+            ("улучши фото", ActionIntent::AutoEnhance),
+            ("убери шум", ActionIntent::Denoise),
+            ("sharpen image", ActionIntent::Sharpen),
+            ("изменить размер на 1200×800", ActionIntent::Resize { width: 1200, height: 800 }),
+            ("expand canvas to 1920x1080", ActionIntent::ExpandCanvas { width: 1920, height: 1080 }),
+        ];
+        for (prompt, expected) in cases {
+            assert_eq!(session.plan_ai_action(prompt).unwrap().intent, expected, "{prompt}");
+        }
         assert!(session.plan_ai_action("execute javascript").is_err());
+    }
+
+    #[test]
+    fn dimensions_are_required_for_sizing_actions() {
+        let session = session();
+        assert!(session.plan_ai_action("измени размер").unwrap_err().to_string().contains("1200x800"));
+        assert!(session.plan_ai_action("расширь холст").unwrap_err().to_string().contains("1920x1080"));
     }
 
     #[test]

@@ -375,9 +375,19 @@ PHOTOCRAFT_MOBILE_SAM_WEIGHTS=/path/mobile_sam-tiny-vitt.safetensors \
 Object Select sends a maximum 1024 × 1024 RGB preview and up to 64 point prompts. Click selects an
 object; Shift-click adds, Alt-click subtracts, and Shift+Alt-click intersects. Worker replies are
 accepted only when document id, revision, source layer and canvas aspect still match, so a delayed
-reply cannot edit a newer state. The prompt bar is a closed local harness: supported Russian and
-English remove-background, blur-background and copy-selection requests become a versioned
-allowlisted plan. Unsupported text fails closed. Selection plus the requested edit is one undo step.
+reply cannot edit a newer state. The prompt bar is a closed local harness. Supported Russian and
+English requests become a versioned allowlisted plan; prompt text is never interpreted as a
+command id. It supports:
+
+- remove or blur the background and copy the foreground (automatic subject selection when needed);
+- remove an explicitly selected unwanted object with content-aware fill;
+- auto enhance, denoise and sharpen the current pixel layer;
+- resize the image or expand the transparent canvas when the prompt includes `W x H`, `W×H` or
+  Russian `W на H` dimensions.
+
+Unsupported or incomplete text fails closed. Document-wide actions do not start semantic
+selection. Object removal requires an explicit selection, while automatic subject selection plus
+its requested edit remains one undo step.
 
 
 ## Indexed Color timings
