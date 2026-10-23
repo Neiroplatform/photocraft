@@ -22,6 +22,10 @@ const MAX_PIXELS: u64 = 8_294_400;
 // Keeping the transport edge at or below 2048 also bounds the uncompressed
 // RGBA request below the gateway's 20 MiB image cap.
 const MAX_PROVIDER_CANVAS_EDGE: u32 = 2048;
+// A small local neighbourhood is enough for antialiased / refined selection
+// fringes. The matting implementation automatically widens its search when a
+// fully owned colour is not present in the first neighbourhood.
+const EDGE_MATTE_RADIUS: f32 = 4.0;
 
 #[derive(Clone, Debug)]
 pub struct Request {
@@ -62,6 +66,25 @@ struct Prepared {
 fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Result<Vec<u8>, String> {
     let image = photocraft_codecs::Image::from_u8(width, height, photocraft_codecs::ChannelLayout::Rgba, rgba).map_err(|error| error.to_string())?;
     photocraft_codecs::encode(&image, photocraft_codecs::Format::Png, &Default::default()).map_err(|error| error.to_string())
+}
+
+fn mask_region(mask: &Surface, bounds: Rect) -> photocraft_algo::selection::Region {
+    let mut coverage = Vec::with_capacity(bounds.width() as usize * bounds.height() as usize);
+    for y in bounds.y0..bounds.y1 {
+        for x in bounds.x0..bounds.x1 {
+            coverage.push((mask.sample_channel(x, y, 0).clamp(0.0, 1.0) * 255.0).round() as u8);
+        }
+    }
+    photocraft_algo::selection::Region { bbox: bounds, mask: coverage }
+}
+
+fn preserved_foreground(source: &Surface, mask: &Surface, bounds: Rect) -> Surface {
+    let region = mask_region(mask, bounds);
+    // A flattened photograph already contains the old background colour in
+    // antialiased boundary pixels. Replace only that soft fringe from nearby
+    // fully selected foreground before applying the authoritative alpha.
+    let decontaminated = photocraft_algo::matting::decontaminate(source, &region, EDGE_MATTE_RADIUS, 100.0);
+    photocraft_algo::matting::masked_copy(&decontaminated, &region)
 }
 
 fn background_provider_canvas(width: u32, height: u32, rgba: &[[u8; 4]]) -> Result<(photocraft_geom::Size, Vec<u8>), String> {
@@ -120,12 +143,10 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> 
 
     if kind == CloudEditKind::ReplaceBackground {
         let selection = state.doc.selection.as_ref().ok_or_else(|| "Select the main object, then replace the background again.".to_string())?;
-        let mut foreground_rgba = rgba.clone();
-        for (index, (background_pixel, foreground_pixel)) in rgba.iter_mut().zip(&mut foreground_rgba).enumerate() {
+        for (index, background_pixel) in rgba.iter_mut().enumerate() {
             let x = bounds.x0 + i32::try_from(index % width as usize).map_err(|_| "Document is too large".to_string())?;
             let y = bounds.y0 + i32::try_from(index / width as usize).map_err(|_| "Document is too large".to_string())?;
             let selected = selection.sample_channel(x, y, 0).clamp(0.0, 1.0);
-            foreground_pixel[3] = (f32::from(foreground_pixel[3]) * selected).round() as u8;
             background_pixel[3] = (f32::from(background_pixel[3]) * (1.0 - selected)).round() as u8;
             // Transparent RGB still survives PNG encoding. Clear it as well so
             // foreground pixels are not disclosed to the cloud provider.
@@ -133,8 +154,7 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> 
                 background_pixel[..3].fill(0);
             }
         }
-        let bytes: Vec<u8> = foreground_rgba.into_iter().flatten().collect();
-        foreground = Some(photocraft_engine::edit_cmds::Clip { surface: Surface::from_interleaved(PixelFormat::RGBA8, bounds, &bytes), bounds });
+        foreground = Some(photocraft_engine::edit_cmds::Clip { surface: preserved_foreground(&surface, selection, bounds), bounds });
         subject_mask = Some(selection.clone());
     }
     let image_png = if kind == CloudEditKind::ReplaceBackground {
@@ -274,16 +294,34 @@ fn fitted_surface(image_png: &[u8], target_size: photocraft_geom::Size, expected
 }
 
 fn key_subject_hole(mut surface: Surface, mask: &Surface, bounds: Rect) -> Surface {
+    // The provider is asked to paint the subject silhouette chroma green. For
+    // a soft local selection, however, simply making the background alpha
+    // `1 - selection` creates an alpha hole when the foreground is composed
+    // over it. Build a local edge matte whose fully owned samples are the real
+    // generated background and whose soft samples are precisely the subject
+    // transition. Decontamination then reconstructs transition RGB without
+    // using provider chroma or returned subject pixels.
+    let mut edge_matte = mask_region(mask, bounds);
+    for value in &mut edge_matte.mask {
+        *value = match *value {
+            0 => 255,
+            255 => 0,
+            _ => 128,
+        };
+    }
+    surface = photocraft_algo::matting::decontaminate(&surface, &edge_matte, EDGE_MATTE_RADIUS, 100.0);
     let mut pixels = vec![[0u8; 4]; bounds.width() as usize * bounds.height() as usize];
     surface.read_rgba8_into(bounds, &mut pixels);
     for (index, pixel) in pixels.iter_mut().enumerate() {
         let x = bounds.x0 + (index % bounds.width() as usize) as i32;
         let y = bounds.y0 + (index / bounds.width() as usize) as i32;
-        let selected = mask.sample_channel(x, y, 0).clamp(0.0, 1.0);
-        if selected > 0.0 {
-            let chroma_green = pixel[1] >= 180 && pixel[1] >= pixel[0].saturating_add(48) && pixel[1] >= pixel[2].saturating_add(48);
-            let keyed = if chroma_green { 0.0 } else { 1.0 - selected };
-            pixel[3] = (f32::from(pixel[3]) * keyed.min(1.0 - selected)).round() as u8;
+        let selected = (mask.sample_channel(x, y, 0).clamp(0.0, 1.0) * 255.0).round() as u8;
+        if selected == 255 {
+            pixel[3] = 0;
+        } else if selected > 0 {
+            // Opaque underlap beneath a partially transparent foreground keeps
+            // source-over alpha at one across the entire soft transition.
+            pixel[3] = 255;
         }
     }
     let bytes: Vec<u8> = pixels.into_iter().flatten().collect();
@@ -410,6 +448,56 @@ mod tests {
         keyed.read_rgba8_into(bounds, &mut pixels);
         assert_eq!(pixels[0][3], 0);
         assert_eq!(pixels[1], [0, 255, 0, 255], "real green background outside the subject must survive");
+    }
+
+    #[test]
+    fn soft_subject_edge_gets_opaque_reconstructed_background_underlap() {
+        let bounds = Rect::new(0, 0, 3, 1);
+        let provider = Surface::from_interleaved(
+            PixelFormat::RGBA8,
+            bounds,
+            &[
+                20, 40, 200, 255, // real generated background
+                0, 255, 0, 255, // provider chroma in the soft transition
+                0, 255, 0, 255, // provider chroma in the subject core
+            ],
+        );
+        let mask = Surface::from_interleaved(PixelFormat::GRAY8, bounds, &[0, 128, 255]);
+
+        let keyed = key_subject_hole(provider, &mask, bounds);
+        let mut pixels = [[0; 4]; 3];
+        keyed.read_rgba8_into(bounds, &mut pixels);
+
+        assert_eq!(pixels[0], [20, 40, 200, 255]);
+        assert_eq!(pixels[1], [20, 40, 200, 255], "the transition must use reconstructed background, not provider chroma");
+        assert_eq!(pixels[2][3], 0, "the fully selected subject core remains clear on the background layer");
+        let foreground_alpha = 128.0 / 255.0;
+        let composite_alpha = foreground_alpha + (f32::from(pixels[1][3]) / 255.0) * (1.0 - foreground_alpha);
+        assert!((composite_alpha - 1.0).abs() < f32::EPSILON, "the two-layer soft edge must not contain an alpha seam");
+    }
+
+    #[test]
+    fn preserved_foreground_decontaminates_only_its_soft_fringe() {
+        let bounds = Rect::new(0, 0, 3, 1);
+        let source = Surface::from_interleaved(
+            PixelFormat::RGBA8,
+            bounds,
+            &[
+                0, 0, 0, 255, // old background
+                64, 0, 0, 255, // old-background-contaminated antialias pixel
+                240, 20, 10, 255, // fully selected foreground
+            ],
+        );
+        let mask = Surface::from_interleaved(PixelFormat::GRAY8, bounds, &[0, 128, 255]);
+
+        let foreground = preserved_foreground(&source, &mask, bounds);
+        let mut pixels = [[0; 4]; 3];
+        foreground.read_rgba8_into(bounds, &mut pixels);
+
+        assert_eq!(pixels[0][3], 0);
+        assert_eq!(pixels[1][3], 128, "the authoritative soft alpha must remain exact");
+        assert!(pixels[1][0] > 64, "the old-background fringe colour must move toward the owned foreground colour");
+        assert_eq!(pixels[2], [240, 20, 10, 255], "fully selected foreground pixels must remain byte-exact");
     }
 
     #[test]

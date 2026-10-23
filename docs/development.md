@@ -394,11 +394,14 @@ is a layered operation rather than a full-frame repaint: Pixelle first obtains o
 subject selection, keeps the original foreground pixels in memory, and sends only a PNG of the
 background. The subject area in that PNG has both alpha and RGB cleared. The provider is required
 to return the requested background with the transparent silhouette filled by solid `#00ff00`;
-Pixelle keys that colour only inside the authoritative local mask, then creates `AI Background`
-below `Preserved Foreground` and hides the old visible root layers. The provider response is fitted
-with one uniform scale and a centred crop, never independent X/Y scaling. Selection, request,
-layer assembly, cancellation, failure rollback and Undo remain bound to the exact document state
-and one coalesced history step.
+Pixelle keys that colour only inside the authoritative local mask. The fully selected subject core
+stays clear on `AI Background`, while soft transition pixels use an opaque underlap reconstructed
+from nearby generated-background pixels so the two-layer source-over composite cannot contain an
+alpha seam. `Preserved Foreground` retains its authoritative alpha and fully selected pixels; only
+its soft fringe is locally colour-decontaminated. The generated layer stays below it and the old
+visible root layers are hidden. The provider response is fitted with one uniform scale and a centred
+crop, never independent X/Y scaling. Selection, request, layer assembly, cancellation, failure
+rollback and Undo remain bound to the exact document state and one coalesced history step.
 
 
 ## Indexed Color timings
