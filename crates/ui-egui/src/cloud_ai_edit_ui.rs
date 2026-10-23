@@ -16,6 +16,12 @@ use crate::PhotocraftApp;
 
 const MAX_EDGE: u32 = 3840;
 const MAX_PIXELS: u64 = 8_294_400;
+// The current provider may return a square canvas even when an aspect-aware
+// size is requested. Background replacement therefore uses a registered
+// square transport canvas and crops it back to the untouched document bounds.
+// Keeping the transport edge at or below 2048 also bounds the uncompressed
+// RGBA request below the gateway's 20 MiB image cap.
+const MAX_PROVIDER_CANVAS_EDGE: u32 = 2048;
 
 #[derive(Clone, Debug)]
 pub struct Request {
@@ -49,12 +55,49 @@ struct Prepared {
     mask_png: Option<Vec<u8>>,
     foreground: Option<photocraft_engine::edit_cmds::Clip>,
     subject_mask: Option<Surface>,
+    provider_canvas: Option<photocraft_geom::Size>,
     source_layers: Vec<LayerId>,
 }
 
 fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Result<Vec<u8>, String> {
     let image = photocraft_codecs::Image::from_u8(width, height, photocraft_codecs::ChannelLayout::Rgba, rgba).map_err(|error| error.to_string())?;
     photocraft_codecs::encode(&image, photocraft_codecs::Format::Png, &Default::default()).map_err(|error| error.to_string())
+}
+
+fn background_provider_canvas(width: u32, height: u32, rgba: &[[u8; 4]]) -> Result<(photocraft_geom::Size, Vec<u8>), String> {
+    let source_bounds = Rect::new(0, 0, width as i32, height as i32);
+    let source = Surface::from_interleaved(PixelFormat::RGBA8, source_bounds, rgba.as_flattened());
+    let source_edge = width.max(height);
+    let edge = source_edge.min(MAX_PROVIDER_CANVAS_EDGE);
+    let scale = f64::from(edge) / f64::from(source_edge.max(1));
+    let canvas_width = (f64::from(width) * scale).round().clamp(1.0, f64::from(edge)) as u32;
+    let canvas_height = (f64::from(height) * scale).round().clamp(1.0, f64::from(edge)) as u32;
+    let scaled = if edge == source_edge {
+        source
+    } else {
+        photocraft_algo::resample::resize_surface_in_canvas(&source, scale, scale, photocraft_algo::resample::Resample::Bicubic, source_bounds)
+    };
+    let scaled_bounds = Rect::new(0, 0, canvas_width as i32, canvas_height as i32);
+    let mut content = vec![[0u8; 4]; canvas_width as usize * canvas_height as usize];
+    scaled.read_rgba8_into(scaled_bounds, &mut content);
+
+    let offset_x = (edge - canvas_width) / 2;
+    let offset_y = (edge - canvas_height) / 2;
+    let mut canvas = vec![[0u8; 4]; edge as usize * edge as usize];
+    for y in 0..edge {
+        let source_y = y.saturating_sub(offset_y).min(canvas_height - 1);
+        for x in 0..edge {
+            let source_x = x.saturating_sub(offset_x).min(canvas_width - 1);
+            let mut pixel = content[source_y as usize * canvas_width as usize + source_x as usize];
+            if x < offset_x || x >= offset_x + canvas_width || y < offset_y || y >= offset_y + canvas_height {
+                // Padding is transport-only. Keep it opaque so it cannot be
+                // confused with the transparent subject silhouette.
+                pixel[3] = 255;
+            }
+            canvas[y as usize * edge as usize + x as usize] = pixel;
+        }
+    }
+    Ok((photocraft_geom::Size::new(edge, edge), canvas.into_iter().flatten().collect()))
 }
 
 fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> {
@@ -72,6 +115,7 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> 
     surface.read_rgba8_into(bounds, &mut rgba);
     let mut foreground = None;
     let mut subject_mask = None;
+    let mut provider_canvas = None;
     let source_layers = state.doc.layers.iter().filter(|layer| layer.visible).map(|layer| layer.id).collect();
 
     if kind == CloudEditKind::ReplaceBackground {
@@ -93,7 +137,13 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> 
         foreground = Some(photocraft_engine::edit_cmds::Clip { surface: Surface::from_interleaved(PixelFormat::RGBA8, bounds, &bytes), bounds });
         subject_mask = Some(selection.clone());
     }
-    let image_png = encode_png(width, height, rgba.into_iter().flatten().collect())?;
+    let image_png = if kind == CloudEditKind::ReplaceBackground {
+        let (size, bytes) = background_provider_canvas(width, height, &rgba)?;
+        provider_canvas = Some(size);
+        encode_png(size.width, size.height, bytes)?
+    } else {
+        encode_png(width, height, rgba.into_iter().flatten().collect())?
+    };
 
     let mask_png = if kind == CloudEditKind::GenerativeFill {
         let selection = state.doc.selection.as_ref().ok_or_else(|| "Select the area to fill, then run the prompt again.".to_string())?;
@@ -108,7 +158,7 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> 
     } else {
         None
     };
-    Ok(Prepared { image_png, mask_png, foreground, subject_mask, source_layers })
+    Ok(Prepared { image_png, mask_png, foreground, subject_mask, provider_canvas, source_layers })
 }
 
 pub fn start(
@@ -192,9 +242,17 @@ fn cover_size(source: photocraft_geom::Size, target: photocraft_geom::Size) -> R
     ))
 }
 
-fn fitted_surface(image_png: &[u8], target_size: photocraft_geom::Size) -> Result<Surface, String> {
+fn fitted_surface(image_png: &[u8], target_size: photocraft_geom::Size, expected_provider_canvas: Option<photocraft_geom::Size>) -> Result<Surface, String> {
     let imported = photocraft_io::import("pixelle-cloud-edit.png", image_png).map_err(|error| format!("Cloud edit returned an invalid image: {error}"))?;
     let source_size = imported.document.size;
+    if let Some(expected) = expected_provider_canvas
+        && u64::from(source_size.width) * u64::from(expected.height) != u64::from(expected.width) * u64::from(source_size.height)
+    {
+        return Err(format!(
+            "Cloud background returned {}×{} instead of the registered {}×{} aspect; the original document was not changed",
+            source_size.width, source_size.height, expected.width, expected.height
+        ));
+    }
     let fitted = cover_size(source_size, target_size)?;
     let mut result_session = photocraft_engine::Session::new();
     result_session.add_document(imported.document, None);
@@ -251,7 +309,7 @@ fn apply(app: &mut PhotocraftApp, plan: &ActionPlan, prepared: &Prepared, coales
     let state = app.session.active().ok_or_else(|| "No document is open".to_string())?;
     let target_size = state.doc.size;
     let bounds = state.doc.bounds();
-    let mut surface = fitted_surface(&response.image_png, target_size)?;
+    let mut surface = fitted_surface(&response.image_png, target_size, prepared.provider_canvas)?;
     if let (Some(mask), Some(foreground)) = (&prepared.subject_mask, &prepared.foreground) {
         surface = key_subject_hole(surface, mask, bounds);
         let result = (|| {
@@ -317,11 +375,14 @@ mod tests {
 
         let request = observed.borrow();
         let request = request.as_ref().unwrap();
-        let (_, pixels) = rgba_from_png(&request.image_png);
-        assert_eq!(pixels[0], [204, 51, 26, 255]);
-        assert_eq!(pixels[1], [0, 0, 0, 0]);
-        assert_eq!(pixels[2], [0, 0, 0, 0]);
-        assert_eq!(pixels[3], [204, 51, 26, 255]);
+        let (provider_bounds, pixels) = rgba_from_png(&request.image_png);
+        assert_eq!(provider_bounds, Rect::new(0, 0, 4, 4));
+        let at = |x: usize, y: usize| pixels[y * 4 + x];
+        assert_eq!(at(0, 1), [204, 51, 26, 255]);
+        assert_eq!(at(1, 1), [0, 0, 0, 0]);
+        assert_eq!(at(2, 1), [0, 0, 0, 0]);
+        assert_eq!(at(3, 1), [204, 51, 26, 255]);
+        assert_eq!(at(1, 0)[3], 255, "transport padding must not become a second transparent subject hole");
         assert!(request.mask_png.is_none());
     }
 
@@ -329,6 +390,14 @@ mod tests {
     fn cover_fit_preserves_aspect_before_center_crop() {
         assert_eq!(cover_size(photocraft_geom::Size::new(1024, 1024), photocraft_geom::Size::new(1884, 1028)).unwrap(), photocraft_geom::Size::new(1884, 1884));
         assert_eq!(cover_size(photocraft_geom::Size::new(1536, 1024), photocraft_geom::Size::new(1884, 1028)).unwrap(), photocraft_geom::Size::new(1884, 1256));
+    }
+
+    #[test]
+    fn provider_canvas_downscales_large_sources_without_changing_their_aspect() {
+        let rgba = vec![[12, 34, 56, 255]; 3000 * 1000];
+        let (size, bytes) = background_provider_canvas(3000, 1000, &rgba).unwrap();
+        assert_eq!(size, photocraft_geom::Size::new(2048, 2048));
+        assert_eq!(bytes.len(), 2048 * 2048 * 4);
     }
 
     #[test]
@@ -400,10 +469,12 @@ mod tests {
         sender.send(Ok(Response { image_png, model: "fixture".into() })).unwrap();
         poll(&mut app);
         let state = app.session.active().unwrap();
+        assert_eq!(state.doc.size, photocraft_geom::Size::new(16, 12), "a provider reply must never resize the source document");
         assert_eq!(state.doc.layer_count(), 3);
         assert!(!state.doc.layers[0].visible);
         assert_eq!(state.doc.layers[1].name, "AI Background");
         assert_eq!(state.doc.layers[2].name, "Preserved Foreground");
+        assert_eq!(state.doc.layers[1].surface().unwrap().content_bounds(), Rect::new(0, 0, 16, 12));
         assert_eq!(state.doc.layers[1].surface().unwrap().sample_channel(6, 5, 3), 0.0);
         assert_eq!(state.doc.layers[2].surface().unwrap().pixel(6, 5), vec![0.2, 0.4, 0.6, 1.0]);
         assert_eq!(state.history.past_len(), history + 1);
@@ -415,5 +486,29 @@ mod tests {
         assert_eq!(restored.doc.layer_count(), 1);
         assert!(restored.doc.layers[0].visible);
         assert!(restored.doc.selection.is_some());
+    }
+
+    #[test]
+    fn mismatched_provider_aspect_fails_without_resizing_or_adding_layers() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut receiver = Some(receiver);
+        let service = move |_request: Request| receiver.take().ok_or_else(|| "fixture was already used".into());
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
+        app.session.execute("file.new", serde_json::json!({"width": 16, "height": 12})).unwrap();
+        app.session.execute("select.rect", serde_json::json!({"x": 4, "y": 3, "width": 8, "height": 6})).unwrap();
+        let revision = app.session.active().unwrap().revision;
+        let plan = app.session.plan_ai_action("замени фон на студийный").unwrap();
+        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into(), None, false).unwrap();
+        let image_png = encode_png(3, 2, vec![10; 3 * 2 * 4]).unwrap();
+        sender.send(Ok(Response { image_png, model: "fixture".into() })).unwrap();
+
+        poll(&mut app);
+
+        let state = app.session.active().unwrap();
+        assert_eq!(state.doc.size, photocraft_geom::Size::new(16, 12));
+        assert_eq!(state.doc.layer_count(), 1);
+        assert_eq!(state.revision, revision);
+        assert!(app.ui.status_error);
+        assert!(app.ui.status.contains("registered"));
     }
 }
