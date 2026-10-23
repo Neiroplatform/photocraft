@@ -452,6 +452,15 @@ execution. Automatic subject selection seeds several spatially separated foregro
 a classic foreground proposal, refines with MobileSAM, and coalesces selection plus edit into one
 undo step. Unknown or overlong prompts fail without changing the document.
 
+Cloud background replacement preserves the same local-ownership boundary. The shell receives a
+background-only PNG whose selected subject area has zero alpha and zero RGB; the original
+foreground pixels and the authoritative mask never leave the editor. A valid provider reply uses
+solid chroma green in the subject silhouette. The UI fits the reply with uniform cover scaling and
+a centred crop, removes provider pixels only inside the local mask, and commits two editable root
+layers: generated background below preserved foreground. Previous visible roots are hidden, not
+destroyed. The complete automatic selection and layered assembly share one history key; stale
+replies, cancellation and partial assembly fail without leaving a document mutation.
+
 ---
 
 ## 12. Automation and extensibility

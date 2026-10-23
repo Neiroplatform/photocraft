@@ -24,13 +24,14 @@ pub(crate) enum AfterApply {
     RemoveBackground(String),
     BlurBackground(String),
     CopySelection(String),
+    ReplaceCloudBackground { key: String, prompt: String },
 }
 
 impl AfterApply {
     fn coalesce(&self) -> Option<&str> {
         match self {
             Self::Nothing => None,
-            Self::RemoveBackground(key) | Self::BlurBackground(key) | Self::CopySelection(key) => Some(key),
+            Self::RemoveBackground(key) | Self::BlurBackground(key) | Self::CopySelection(key) | Self::ReplaceCloudBackground { key, .. } => Some(key),
         }
     }
 }

@@ -35,7 +35,8 @@ fn start_subject_selection(app: &mut PhotocraftApp, after: crate::semantic_selec
         crate::semantic_select_ui::AfterApply::Nothing => None,
         crate::semantic_select_ui::AfterApply::RemoveBackground(key)
         | crate::semantic_select_ui::AfterApply::BlurBackground(key)
-        | crate::semantic_select_ui::AfterApply::CopySelection(key) => Some(key.clone()),
+        | crate::semantic_select_ui::AfterApply::CopySelection(key)
+        | crate::semantic_select_ui::AfterApply::ReplaceCloudBackground { key, .. } => Some(key.clone()),
     };
     let seeds = subject_seed_points(app);
     if seeds.is_empty() {
@@ -160,11 +161,30 @@ fn finish(app: &mut PhotocraftApp, result: Result<String, String>) {
 
 pub(crate) fn continue_after_selection(app: &mut PhotocraftApp, action: crate::semantic_select_ui::AfterApply) {
     use crate::semantic_select_ui::AfterApply;
+    if let AfterApply::ReplaceCloudBackground { key, prompt } = &action {
+        let result = app.session.plan_ai_action(prompt).map_err(|error| error.to_string()).and_then(|plan| match plan.intent {
+            Intent::CloudEdit(photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground) => crate::cloud_ai_edit_ui::start(
+                app,
+                plan,
+                photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground,
+                prompt.clone(),
+                Some(key.clone()),
+                true,
+            ),
+            _ => Err("The background replacement plan changed while selecting the subject".into()),
+        });
+        if let Err(error) = result {
+            rollback_failed_selection(app, &action);
+            finish(app, Err(error));
+        }
+        return;
+    }
     let result = match &action {
         AfterApply::Nothing => return,
         AfterApply::RemoveBackground(key) => execute(app, Intent::RemoveBackground, true, Some(key)),
         AfterApply::BlurBackground(key) => execute(app, Intent::BlurBackground, true, Some(key)),
         AfterApply::CopySelection(key) => execute(app, Intent::CopySelection, true, Some(key)),
+        AfterApply::ReplaceCloudBackground { .. } => return,
     };
     if result.is_err() {
         rollback_failed_selection(app, &action);
@@ -197,7 +217,19 @@ pub fn run_prompt(app: &mut PhotocraftApp) {
             finish(app, Err("Enable ‘Cloud AI (sends image pixels)’ before running this edit.".into()));
             return;
         }
-        if let Err(error) = crate::cloud_ai_edit_ui::start(app, plan, kind, prompt) {
+        if kind == photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground && !has_selection(app) {
+            let key = format!("ai-cloud-background-{}", app.ui.alloc_id());
+            let continuation = crate::semantic_select_ui::AfterApply::ReplaceCloudBackground { key, prompt };
+            match start_subject_selection(app, continuation.clone()) {
+                Ok(true) => {}
+                Ok(false) => continue_after_selection(app, continuation),
+                Err(error) => finish(app, Err(error)),
+            }
+            return;
+        }
+        let coalesce =
+            (kind == photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground).then(|| format!("ai-cloud-background-{}", app.ui.alloc_id()));
+        if let Err(error) = crate::cloud_ai_edit_ui::start(app, plan, kind, prompt, coalesce, false) {
             finish(app, Err(error));
         }
         return;
@@ -327,6 +359,7 @@ mod tests {
         };
         let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
         app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        app.session.execute("select.rect", serde_json::json!({"x": 8, "y": 5, "width": 16, "height": 14})).unwrap();
         let history = app.session.active().unwrap().history.past_len();
         app.ui.ai_prompt = "замени фон на студийный".into();
         run_prompt(&mut app);
@@ -338,6 +371,54 @@ mod tests {
         run_prompt(&mut app);
         assert_eq!(calls.get(), 1);
         assert!(crate::cloud_ai_edit_ui::is_pending(&app));
+        assert_eq!(app.session.active().unwrap().history.past_len(), history);
+    }
+
+    #[test]
+    fn background_replacement_selects_the_subject_before_cloud_dispatch() {
+        let semantic = move |request: crate::semantic_select_ui::Request| {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let mut alpha = vec![0; request.width as usize * request.height as usize];
+            for y in 5..19 {
+                for x in 8..24 {
+                    alpha[y * request.width as usize + x] = 255;
+                }
+            }
+            let _ = sender.send(Ok(SegmentationMask {
+                width: request.width,
+                height: request.height,
+                alpha,
+                confidence: Some(0.96),
+                model: ModelIdentity::mobile_sam_tiny(),
+            }));
+            Ok(receiver)
+        };
+        let calls = Rc::new(Cell::new(0));
+        let observed = calls.clone();
+        let cloud = move |_request: crate::cloud_ai_edit_ui::Request| {
+            observed.set(observed.get() + 1);
+            let (_sender, receiver) = std::sync::mpsc::channel();
+            Ok(receiver)
+        };
+        let mut app = PhotocraftApp::new(
+            Session::new(),
+            crate::Services { semantic_select: Some(Box::new(semantic)), cloud_ai_edit: Some(Box::new(cloud)), ..Default::default() },
+        );
+        app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        let history = app.session.active().unwrap().history.past_len();
+        app.ui.ai_cloud_consent = true;
+        app.ui.ai_prompt = "замени фон на светлую студию".into();
+
+        run_prompt(&mut app);
+
+        assert_eq!(calls.get(), 1, "the provider must be called only after the local mask exists");
+        assert!(crate::cloud_ai_edit_ui::is_pending(&app));
+        assert!(app.session.active().unwrap().doc.selection.is_some());
+        assert_eq!(app.session.active().unwrap().history.past_len(), history + 1);
+        assert!(!app.ui.status_error, "{}", app.ui.status);
+
+        assert!(crate::cloud_ai_edit_ui::cancel(&mut app));
+        assert!(app.session.active().unwrap().doc.selection.is_none());
         assert_eq!(app.session.active().unwrap().history.past_len(), history);
     }
 

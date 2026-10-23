@@ -7,8 +7,10 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use photocraft_color::PixelFormat;
+use photocraft_doc::LayerId;
 use photocraft_engine::ai_action_plan::{ActionPlan, CloudEditKind};
 use photocraft_geom::Rect;
+use photocraft_raster::Surface;
 
 use crate::PhotocraftApp;
 
@@ -35,7 +37,19 @@ pub type Service = Box<dyn FnMut(Request) -> Result<Receiver<Result<Response, St
 pub(crate) struct Pending {
     plan: ActionPlan,
     previous_clipboard: Option<photocraft_engine::edit_cmds::Clip>,
+    prepared: Prepared,
+    coalesce: String,
+    rollback_selection: bool,
     receiver: Receiver<Result<Response, String>>,
+}
+
+#[derive(Clone)]
+struct Prepared {
+    image_png: Vec<u8>,
+    mask_png: Option<Vec<u8>>,
+    foreground: Option<photocraft_engine::edit_cmds::Clip>,
+    subject_mask: Option<Surface>,
+    source_layers: Vec<LayerId>,
 }
 
 fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Result<Vec<u8>, String> {
@@ -43,7 +57,7 @@ fn encode_png(width: u32, height: u32, rgba: Vec<u8>) -> Result<Vec<u8>, String>
     photocraft_codecs::encode(&image, photocraft_codecs::Format::Png, &Default::default()).map_err(|error| error.to_string())
 }
 
-fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<(Vec<u8>, Option<Vec<u8>>), String> {
+fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<Prepared, String> {
     let state = app.session.active().ok_or_else(|| "No document is open".to_string())?;
     let bounds = state.doc.bounds();
     let width = bounds.width();
@@ -56,6 +70,29 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<(Vec<u8>, Option<V
     let surface = photocraft_compose::flatten_to_surface(&state.doc, PixelFormat::RGBA8, None);
     let mut rgba = vec![[0u8; 4]; usize::try_from(pixels).map_err(|_| "Document is too large".to_string())?];
     surface.read_rgba8_into(bounds, &mut rgba);
+    let mut foreground = None;
+    let mut subject_mask = None;
+    let source_layers = state.doc.layers.iter().filter(|layer| layer.visible).map(|layer| layer.id).collect();
+
+    if kind == CloudEditKind::ReplaceBackground {
+        let selection = state.doc.selection.as_ref().ok_or_else(|| "Select the main object, then replace the background again.".to_string())?;
+        let mut foreground_rgba = rgba.clone();
+        for (index, (background_pixel, foreground_pixel)) in rgba.iter_mut().zip(&mut foreground_rgba).enumerate() {
+            let x = bounds.x0 + i32::try_from(index % width as usize).map_err(|_| "Document is too large".to_string())?;
+            let y = bounds.y0 + i32::try_from(index / width as usize).map_err(|_| "Document is too large".to_string())?;
+            let selected = selection.sample_channel(x, y, 0).clamp(0.0, 1.0);
+            foreground_pixel[3] = (f32::from(foreground_pixel[3]) * selected).round() as u8;
+            background_pixel[3] = (f32::from(background_pixel[3]) * (1.0 - selected)).round() as u8;
+            // Transparent RGB still survives PNG encoding. Clear it as well so
+            // foreground pixels are not disclosed to the cloud provider.
+            if selected > 0.0 {
+                background_pixel[..3].fill(0);
+            }
+        }
+        let bytes: Vec<u8> = foreground_rgba.into_iter().flatten().collect();
+        foreground = Some(photocraft_engine::edit_cmds::Clip { surface: Surface::from_interleaved(PixelFormat::RGBA8, bounds, &bytes), bounds });
+        subject_mask = Some(selection.clone());
+    }
     let image_png = encode_png(width, height, rgba.into_iter().flatten().collect())?;
 
     let mask_png = if kind == CloudEditKind::GenerativeFill {
@@ -71,18 +108,26 @@ fn inputs(app: &PhotocraftApp, kind: CloudEditKind) -> Result<(Vec<u8>, Option<V
     } else {
         None
     };
-    Ok((image_png, mask_png))
+    Ok(Prepared { image_png, mask_png, foreground, subject_mask, source_layers })
 }
 
-pub fn start(app: &mut PhotocraftApp, plan: ActionPlan, kind: CloudEditKind, prompt: String) -> Result<(), String> {
+pub fn start(
+    app: &mut PhotocraftApp,
+    plan: ActionPlan,
+    kind: CloudEditKind,
+    prompt: String,
+    coalesce: Option<String>,
+    rollback_selection: bool,
+) -> Result<(), String> {
     if app.cloud_ai_edit_pending.is_some() {
         return Err("A cloud edit is already running".into());
     }
     app.session.validate_ai_action(&plan).map_err(|error| error.to_string())?;
-    let (image_png, mask_png) = inputs(app, kind)?;
+    let prepared = inputs(app, kind)?;
     let service = app.services.cloud_ai_edit.as_mut().ok_or_else(|| "Cloud AI editing is unavailable".to_string())?;
-    let receiver = service(Request { plan: plan.clone(), kind, prompt, image_png, mask_png })?;
-    app.cloud_ai_edit_pending = Some(Pending { plan, previous_clipboard: app.session.clipboard.clone(), receiver });
+    let receiver = service(Request { plan: plan.clone(), kind, prompt, image_png: prepared.image_png.clone(), mask_png: prepared.mask_png.clone() })?;
+    let coalesce = coalesce.unwrap_or_else(|| format!("cloud-ai-edit-{}", app.ui.alloc_id()));
+    app.cloud_ai_edit_pending = Some(Pending { plan, previous_clipboard: app.session.clipboard.clone(), prepared, coalesce, rollback_selection, receiver });
     app.ui.status = "Cloud AI edit is running; image pixels are being processed by the configured provider…".into();
     app.ui.status_error = false;
     Ok(())
@@ -94,6 +139,9 @@ pub fn is_pending(app: &PhotocraftApp) -> bool {
 
 pub fn cancel(app: &mut PhotocraftApp) -> bool {
     let Some(pending) = app.cloud_ai_edit_pending.take() else { return false };
+    if pending.rollback_selection && app.session.validate_ai_action(&pending.plan).is_ok() {
+        let _ = app.session.execute("edit.undo", serde_json::json!({}));
+    }
     app.session.clipboard = pending.previous_clipboard;
     app.ui.status = "Cloud AI edit cancelled; the document was not changed".into();
     app.ui.status_error = false;
@@ -107,7 +155,10 @@ pub fn poll(app: &mut PhotocraftApp) {
         Some(Ok(result)) => result,
     };
     let Some(pending) = app.cloud_ai_edit_pending.take() else { return };
-    let result = reply.and_then(|response| apply(app, &pending.plan, response));
+    let result = reply.and_then(|response| apply(app, &pending.plan, &pending.prepared, &pending.coalesce, response));
+    if result.is_err() && pending.rollback_selection && app.session.validate_ai_action(&pending.plan).is_ok() {
+        let _ = app.session.execute("edit.undo", serde_json::json!({}));
+    }
     app.session.clipboard = pending.previous_clipboard;
     match result {
         Ok(message) => {
@@ -122,24 +173,106 @@ pub fn poll(app: &mut PhotocraftApp) {
     }
 }
 
-fn apply(app: &mut PhotocraftApp, plan: &ActionPlan, response: Response) -> Result<String, String> {
-    app.session.validate_ai_action(plan).map_err(|_| "Cloud edit result was discarded because the document changed".to_string())?;
-    let imported =
-        photocraft_io::import("pixelle-cloud-edit.png", &response.image_png).map_err(|error| format!("Cloud edit returned an invalid image: {error}"))?;
-    let state = app.session.active().ok_or_else(|| "No document is open".to_string())?;
-    let target_size = state.doc.size;
+fn cover_size(source: photocraft_geom::Size, target: photocraft_geom::Size) -> Result<photocraft_geom::Size, String> {
+    if source.width == 0 || source.height == 0 || target.width == 0 || target.height == 0 {
+        return Err("Cloud edit returned an empty image".into());
+    }
+    let sw = u64::from(source.width);
+    let sh = u64::from(source.height);
+    let tw = u64::from(target.width);
+    let th = u64::from(target.height);
+    let (width, height) = if sw.saturating_mul(th) >= tw.saturating_mul(sh) {
+        ((sw.saturating_mul(th).saturating_add(sh - 1)) / sh, th)
+    } else {
+        (tw, (sh.saturating_mul(tw).saturating_add(sw - 1)) / sw)
+    };
+    Ok(photocraft_geom::Size::new(
+        u32::try_from(width).map_err(|_| "Cloud edit result is too large".to_string())?,
+        u32::try_from(height).map_err(|_| "Cloud edit result is too large".to_string())?,
+    ))
+}
+
+fn fitted_surface(image_png: &[u8], target_size: photocraft_geom::Size) -> Result<Surface, String> {
+    let imported = photocraft_io::import("pixelle-cloud-edit.png", image_png).map_err(|error| format!("Cloud edit returned an invalid image: {error}"))?;
+    let source_size = imported.document.size;
+    let fitted = cover_size(source_size, target_size)?;
     let mut result_session = photocraft_engine::Session::new();
     result_session.add_document(imported.document, None);
-    if result_session.active().is_some_and(|result| result.doc.size != target_size) {
+    if fitted != source_size {
         result_session
-            .execute("image.imageSize", serde_json::json!({"width": target_size.width, "height": target_size.height, "resample": "bicubic"}))
+            .execute("image.imageSize", serde_json::json!({"width": fitted.width, "height": fitted.height, "resample": "bicubic"}))
             .map_err(|error| format!("Cloud edit result could not be fitted to the document: {error}"))?;
     }
+    if fitted != target_size {
+        result_session
+            .execute(
+                "image.canvasSize",
+                serde_json::json!({"width": target_size.width, "height": target_size.height, "anchor": "center", "extensionColor": "transparent"}),
+            )
+            .map_err(|error| format!("Cloud edit result could not be cropped to the document: {error}"))?;
+    }
     let result = result_session.active().ok_or_else(|| "Cloud edit result could not be opened".to_string())?;
-    let bounds = result.doc.bounds();
-    let surface = photocraft_compose::flatten_to_surface(&result.doc, PixelFormat::RGBA8, None);
-    app.session.clipboard = Some(photocraft_engine::edit_cmds::Clip { surface, bounds: Rect::new(bounds.x0, bounds.y0, bounds.x1, bounds.y1) });
-    app.run("edit.pasteSpecial.pasteInPlace", serde_json::json!({}))?;
+    Ok(photocraft_compose::flatten_to_surface(&result.doc, PixelFormat::RGBA8, None))
+}
+
+fn key_subject_hole(mut surface: Surface, mask: &Surface, bounds: Rect) -> Surface {
+    let mut pixels = vec![[0u8; 4]; bounds.width() as usize * bounds.height() as usize];
+    surface.read_rgba8_into(bounds, &mut pixels);
+    for (index, pixel) in pixels.iter_mut().enumerate() {
+        let x = bounds.x0 + (index % bounds.width() as usize) as i32;
+        let y = bounds.y0 + (index / bounds.width() as usize) as i32;
+        let selected = mask.sample_channel(x, y, 0).clamp(0.0, 1.0);
+        if selected > 0.0 {
+            let chroma_green = pixel[1] >= 180 && pixel[1] >= pixel[0].saturating_add(48) && pixel[1] >= pixel[2].saturating_add(48);
+            let keyed = if chroma_green { 0.0 } else { 1.0 - selected };
+            pixel[3] = (f32::from(pixel[3]) * keyed.min(1.0 - selected)).round() as u8;
+        }
+    }
+    let bytes: Vec<u8> = pixels.into_iter().flatten().collect();
+    surface = Surface::from_interleaved(PixelFormat::RGBA8, bounds, &bytes);
+    surface.prune();
+    surface
+}
+
+fn pasted_layer(value: serde_json::Value) -> Result<LayerId, String> {
+    value.get("layer").and_then(serde_json::Value::as_u64).map(LayerId).ok_or_else(|| "Cloud edit could not create an editable layer".to_string())
+}
+
+fn paste_named(app: &mut PhotocraftApp, clip: photocraft_engine::edit_cmds::Clip, name: &str, coalesce: &str) -> Result<LayerId, String> {
+    app.session.clipboard = Some(clip);
+    let layer =
+        pasted_layer(app.session.execute("edit.pasteSpecial.pasteInPlace", serde_json::json!({"coalesce": coalesce})).map_err(|error| error.to_string())?)?;
+    app.session.execute("layer.renameLayer", serde_json::json!({"layer": layer.0, "name": name, "coalesce": coalesce})).map_err(|error| error.to_string())?;
+    Ok(layer)
+}
+
+fn apply(app: &mut PhotocraftApp, plan: &ActionPlan, prepared: &Prepared, coalesce: &str, response: Response) -> Result<String, String> {
+    app.session.validate_ai_action(plan).map_err(|_| "Cloud edit result was discarded because the document changed".to_string())?;
+    let state = app.session.active().ok_or_else(|| "No document is open".to_string())?;
+    let target_size = state.doc.size;
+    let bounds = state.doc.bounds();
+    let mut surface = fitted_surface(&response.image_png, target_size)?;
+    if let (Some(mask), Some(foreground)) = (&prepared.subject_mask, &prepared.foreground) {
+        surface = key_subject_hole(surface, mask, bounds);
+        let result = (|| {
+            let anchor = prepared.source_layers.last().copied().ok_or_else(|| "The source document has no visible layer".to_string())?;
+            app.session.select_layer(anchor).map_err(|error| error.to_string())?;
+            let background = photocraft_engine::edit_cmds::Clip { surface, bounds };
+            let _background_layer = paste_named(app, background, "AI Background", coalesce)?;
+            let _foreground_layer = paste_named(app, foreground.clone(), "Preserved Foreground", coalesce)?;
+            for layer in &prepared.source_layers {
+                app.session.execute("layer.hideLayers", serde_json::json!({"layer": layer.0, "coalesce": coalesce})).map_err(|error| error.to_string())?;
+            }
+            Ok::<(), String>(())
+        })();
+        if let Err(error) = result {
+            let _ = app.session.execute("edit.undo", serde_json::json!({}));
+            return Err(format!("Cloud background could not be assembled: {error}"));
+        }
+        return Ok(format!("Background replaced on a separate layer; foreground pixels were preserved ({})", response.model));
+    }
+    app.session.clipboard = Some(photocraft_engine::edit_cmds::Clip { surface, bounds });
+    app.session.execute("edit.pasteSpecial.pasteInPlace", serde_json::json!({"coalesce": coalesce})).map_err(|error| error.to_string())?;
     Ok(format!("Cloud edit added as a new layer ({})", response.model))
 }
 
@@ -147,6 +280,68 @@ fn apply(app: &mut PhotocraftApp, plan: &ActionPlan, response: Response) -> Resu
 mod tests {
     use super::*;
     use photocraft_engine::Session;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn rgba_from_png(bytes: &[u8]) -> (Rect, Vec<[u8; 4]>) {
+        let imported = photocraft_io::import("fixture.png", bytes).unwrap();
+        let bounds = imported.document.bounds();
+        let surface = photocraft_compose::flatten_to_surface(&imported.document, PixelFormat::RGBA8, None);
+        let mut pixels = vec![[0; 4]; bounds.width() as usize * bounds.height() as usize];
+        surface.read_rgba8_into(bounds, &mut pixels);
+        (bounds, pixels)
+    }
+
+    #[test]
+    fn replacement_request_contains_background_but_no_foreground_pixels() {
+        let observed = Rc::new(RefCell::new(None));
+        let observed_for_service = observed.clone();
+        let service = move |request: Request| {
+            *observed_for_service.borrow_mut() = Some(request);
+            let (_sender, receiver) = std::sync::mpsc::channel();
+            Ok(receiver)
+        };
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
+        app.session.execute("file.new", serde_json::json!({"width": 4, "height": 2})).unwrap();
+        app.session
+            .edit("fixture pixels", |document, _| {
+                let bounds = document.bounds();
+                document.layers[0].surface_mut().unwrap().fill_rect(bounds, &[0.8, 0.2, 0.1, 1.0]);
+                Ok(())
+            })
+            .unwrap();
+        app.session.execute("select.rect", serde_json::json!({"x": 1, "y": 0, "width": 2, "height": 2})).unwrap();
+        let plan = app.session.plan_ai_action("замени фон на студийный").unwrap();
+
+        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into(), None, false).unwrap();
+
+        let request = observed.borrow();
+        let request = request.as_ref().unwrap();
+        let (_, pixels) = rgba_from_png(&request.image_png);
+        assert_eq!(pixels[0], [204, 51, 26, 255]);
+        assert_eq!(pixels[1], [0, 0, 0, 0]);
+        assert_eq!(pixels[2], [0, 0, 0, 0]);
+        assert_eq!(pixels[3], [204, 51, 26, 255]);
+        assert!(request.mask_png.is_none());
+    }
+
+    #[test]
+    fn cover_fit_preserves_aspect_before_center_crop() {
+        assert_eq!(cover_size(photocraft_geom::Size::new(1024, 1024), photocraft_geom::Size::new(1884, 1028)).unwrap(), photocraft_geom::Size::new(1884, 1884));
+        assert_eq!(cover_size(photocraft_geom::Size::new(1536, 1024), photocraft_geom::Size::new(1884, 1028)).unwrap(), photocraft_geom::Size::new(1884, 1256));
+    }
+
+    #[test]
+    fn chroma_green_is_removed_only_inside_the_local_subject_mask() {
+        let bounds = Rect::new(0, 0, 2, 1);
+        let green = Surface::from_interleaved(PixelFormat::RGBA8, bounds, &[0, 255, 0, 255, 0, 255, 0, 255]);
+        let mask = Surface::from_interleaved(photocraft_color::PixelFormat::GRAY8, bounds, &[255, 0]);
+        let keyed = key_subject_hole(green, &mask, bounds);
+        let mut pixels = [[0; 4]; 2];
+        keyed.read_rgba8_into(bounds, &mut pixels);
+        assert_eq!(pixels[0][3], 0);
+        assert_eq!(pixels[1], [0, 255, 0, 255], "real green background outside the subject must survive");
+    }
 
     #[test]
     fn stale_cloud_reply_never_mutates_a_changed_document() {
@@ -155,8 +350,16 @@ mod tests {
         let service = move |_request: Request| receiver.take().ok_or_else(|| "fixture was already used".into());
         let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
         app.session.execute("file.new", serde_json::json!({"width": 16, "height": 12})).unwrap();
+        app.session
+            .edit("fixture pixels", |document, _| {
+                let bounds = document.bounds();
+                document.layers[0].surface_mut().unwrap().fill_rect(bounds, &[0.2, 0.4, 0.6, 1.0]);
+                Ok(())
+            })
+            .unwrap();
+        app.session.execute("select.rect", serde_json::json!({"x": 4, "y": 3, "width": 8, "height": 6})).unwrap();
         let plan = app.session.plan_ai_action("замени фон на студийный").unwrap();
-        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into()).unwrap();
+        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into(), None, false).unwrap();
         app.session.execute("layer.new.layer", serde_json::json!({})).unwrap();
         let image_png = encode_png(16, 12, vec![0; 16 * 12 * 4]).unwrap();
         sender.send(Ok(Response { image_png, model: "fixture".into() })).unwrap();
@@ -171,7 +374,7 @@ mod tests {
         let mut app = PhotocraftApp::new(Session::new(), crate::Services::default());
         app.session.execute("file.new", serde_json::json!({"width": 16, "height": 12})).unwrap();
         let plan = app.session.plan_ai_action("дорисуй выделенную область").unwrap();
-        let error = start(&mut app, plan, CloudEditKind::GenerativeFill, "дорисуй выделенную область".into()).unwrap_err();
+        let error = start(&mut app, plan, CloudEditKind::GenerativeFill, "дорисуй выделенную область".into(), None, false).unwrap_err();
         assert!(error.contains("Select the area"));
     }
 
@@ -182,16 +385,35 @@ mod tests {
         let service = move |_request: Request| receiver.take().ok_or_else(|| "fixture was already used".into());
         let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(service)), ..Default::default() });
         app.session.execute("file.new", serde_json::json!({"width": 16, "height": 12})).unwrap();
+        app.session
+            .edit("fixture pixels", |document, _| {
+                let bounds = document.bounds();
+                document.layers[0].surface_mut().unwrap().fill_rect(bounds, &[0.2, 0.4, 0.6, 1.0]);
+                Ok(())
+            })
+            .unwrap();
+        app.session.execute("select.rect", serde_json::json!({"x": 4, "y": 3, "width": 8, "height": 6})).unwrap();
         let history = app.session.active().unwrap().history.past_len();
         let plan = app.session.plan_ai_action("замени фон на студийный").unwrap();
-        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into()).unwrap();
+        start(&mut app, plan, CloudEditKind::ReplaceBackground, "замени фон на студийный".into(), None, false).unwrap();
         let image_png = encode_png(1, 1, vec![10, 20, 30, 255]).unwrap();
         sender.send(Ok(Response { image_png, model: "fixture".into() })).unwrap();
         poll(&mut app);
         let state = app.session.active().unwrap();
-        assert_eq!(state.doc.layer_count(), 2);
+        assert_eq!(state.doc.layer_count(), 3);
+        assert!(!state.doc.layers[0].visible);
+        assert_eq!(state.doc.layers[1].name, "AI Background");
+        assert_eq!(state.doc.layers[2].name, "Preserved Foreground");
+        assert_eq!(state.doc.layers[1].surface().unwrap().sample_channel(6, 5, 3), 0.0);
+        assert_eq!(state.doc.layers[2].surface().unwrap().pixel(6, 5), vec![0.2, 0.4, 0.6, 1.0]);
         assert_eq!(state.history.past_len(), history + 1);
         assert!(!app.ui.status_error, "{}", app.ui.status);
         assert!(app.ui.status.contains("fixture"));
+
+        app.session.execute("edit.undo", serde_json::json!({})).unwrap();
+        let restored = app.session.active().unwrap();
+        assert_eq!(restored.doc.layer_count(), 1);
+        assert!(restored.doc.layers[0].visible);
+        assert!(restored.doc.selection.is_some());
     }
 }
