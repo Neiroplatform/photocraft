@@ -655,12 +655,13 @@ pub fn commit(app: &mut PhotocraftApp) {
 /// each pointer event, so a press with a tool chosen just before it (`ui.pointer`'s `tool`) goes to
 /// that tool.
 pub fn end_if_left(app: &mut PhotocraftApp) {
-    let Some(t) = &app.ui.transform else { return };
+    let Some(t) = app.ui.transform.clone() else { return };
     let Some(st) = app.session.active() else { return cancel(app) };
 
     let layer = LayerId(t.layer);
     let made = t.made;
     let selection = t.selection;
+    let committed = st.doc.clone();
     let preview_doc_id = app.transform_preview.as_ref().map(|pv| pv.doc.id);
     let switched_document = preview_doc_id.is_some_and(|id| id != st.doc.id);
 
@@ -678,7 +679,38 @@ pub fn end_if_left(app: &mut PhotocraftApp) {
         || (!selection && st.active_layer.is_some_and(|active| active.0 != layer.0))
     {
         commit(app);
+    } else {
+        sync_layer_visibility(app, &t, &committed);
     }
+}
+
+/// Keep an open layer transform's detached preview in the same visibility state as the canonical
+/// document. The preview document deliberately hides the moving layer and draws its pixels from a
+/// separate texture; an eye toggle therefore has to affect both halves. Without this sync, the
+/// pre-transform snapshot kept drawing hidden sibling layers and the moving texture stayed visible
+/// until the transform was committed or cancelled.
+fn sync_layer_visibility(app: &mut PhotocraftApp, t: &TransformSession, committed: &Document) {
+    // Selection, channel/mask and path transforms do not use a detached layer texture with the
+    // ordinary layer-opacity contract.
+    if t.selection || t.target.is_some() || t.path.is_some() {
+        return;
+    }
+    let target = LayerId(t.layer);
+    let Some(layer) = committed.layer(target) else { return };
+    let target_opacity = if layer.visible { layer.opacity * layer.fill_opacity } else { 0.0 };
+    let visibility: Vec<(LayerId, bool)> = committed.walk().into_iter().map(|(_, _, l)| (l.id, l.id != target && l.visible)).collect();
+    let Some(preview) = app.transform_preview.as_mut() else { return };
+    preview.opacity = target_opacity;
+    if visibility.iter().all(|(id, visible)| preview.doc.layer(*id).is_none_or(|l| l.visible == *visible)) {
+        return;
+    }
+    let mut doc = (*preview.doc).clone();
+    for (id, visible) in visibility {
+        if let Some(layer) = doc.layer_mut(id) {
+            layer.visible = visible;
+        }
+    }
+    preview.doc = Arc::new(doc);
 }
 
 pub fn cancel(app: &mut PhotocraftApp) {
@@ -2190,6 +2222,36 @@ mod tests {
         let b = st.doc.layer(st.active_layer.unwrap()).unwrap().surface().unwrap().content_bounds();
         assert!(b.width().abs_diff(32) <= 2 && b.x0.abs_diff(0) <= 1, "{b:?}");
         assert!(app.ui.transform.is_none() && app.transform_preview.is_none());
+    }
+
+    /// A Layers-panel eye click remains authoritative while Free Transform owns a detached
+    /// preview. The moving target is drawn only by the preview texture; siblings come from the
+    /// preview document, so both must follow the canonical visibility flags.
+    #[test]
+    fn layer_visibility_stays_live_during_free_transform() {
+        let mut app = app_with_square(64, photocraft_geom::Rect::new(8, 8, 24, 24));
+        let st = app.session.active().unwrap();
+        let target = st.active_layer.unwrap();
+        let sibling = st.doc.layers.iter().find(|l| l.id != target).unwrap().id;
+        begin(&mut app, &egui::Context::default()).unwrap();
+
+        app.run("layer.setProps", json!({"layer": target.0, "visible": false})).unwrap();
+        end_if_left(&mut app);
+        let preview = app.transform_preview.as_ref().unwrap();
+        assert_eq!(preview.opacity, 0.0, "a hidden transform target contributes no preview pixels");
+        assert!(!preview.doc.layer(target).unwrap().visible, "the detached target stays absent from the base preview");
+        assert!(app.ui.transform.is_some(), "visibility does not commit or cancel the transform");
+
+        app.run("layer.setProps", json!({"layer": sibling.0, "visible": false})).unwrap();
+        end_if_left(&mut app);
+        assert!(!app.transform_preview.as_ref().unwrap().doc.layer(sibling).unwrap().visible, "sibling visibility is mirrored into the preview document");
+
+        app.run("layer.setProps", json!({"layer": target.0, "visible": true})).unwrap();
+        end_if_left(&mut app);
+        let preview = app.transform_preview.as_ref().unwrap();
+        assert_eq!(preview.opacity, 1.0, "showing the target restores the same live transform preview");
+        assert!(!preview.doc.layer(target).unwrap().visible, "the target is still drawn exactly once, by the detached texture");
+        assert!(app.ui.transform.is_some());
     }
 
     /// #352: ⌥⌘T transforms a copy. OK leaves the original and a moved copy as one history step;
