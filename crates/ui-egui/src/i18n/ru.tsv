@@ -2549,3 +2549,6 @@ fontWeight	Italic	Курсив
 	Run AI edit	Выполнить ИИ-правку
 	Cancel AI edit	Отменить ИИ-правку
 	Cloud AI (sends image pixels)	Облачный ИИ (отправляет пиксели изображения)
+	Result:	Результат:
+	Background on separate layer	Фон на отдельном слое
+	Whole image on one layer	Всё изображение на одном слое

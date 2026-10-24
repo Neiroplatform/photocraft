@@ -2254,3 +2254,6 @@ fontWeight	Italic	斜體
 	Run AI edit	執行 AI 編輯
 	Cancel AI edit	取消 AI 編輯
 	Cloud AI (sends image pixels)	雲端 AI（傳送影像像素）
+	Result:	結果：
+	Background on separate layer	背景置於獨立圖層
+	Whole image on one layer	整張影像置於單一圖層

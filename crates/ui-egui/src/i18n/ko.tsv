@@ -2856,3 +2856,6 @@ fontWeight	Italic	기울임
 	Run AI edit	AI 편집 실행
 	Cancel AI edit	AI 편집 취소
 	Cloud AI (sends image pixels)	클라우드 AI(이미지 픽셀 전송)
+	Result:	결과:
+	Background on separate layer	배경을 별도 레이어로
+	Whole image on one layer	전체 이미지를 하나의 레이어로

@@ -2698,3 +2698,6 @@ fontWeight	Italic	Italique
 	Run AI edit	Exécuter la modification IA
 	Cancel AI edit	Annuler la modification IA
 	Cloud AI (sends image pixels)	IA cloud (envoie les pixels de l’image)
+	Result:	Résultat :
+	Background on separate layer	Arrière-plan sur un calque séparé
+	Whole image on one layer	Image entière sur un seul calque

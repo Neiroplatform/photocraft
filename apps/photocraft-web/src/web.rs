@@ -356,6 +356,7 @@ async fn request_cloud_ai(request: photocraft_ui_egui::cloud_ai_edit_ui::Request
         "prompt": request.prompt,
         "image_base64": encoded,
         "mask_base64": mask,
+        "background_output": request.background_output,
     }))
     .map_err(|error| error.to_string())?;
     let init = web_sys::RequestInit::new();

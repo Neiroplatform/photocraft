@@ -266,6 +266,13 @@ fn pct(ui: &mut egui::Ui, label: &str, v: &mut f32) {
     crate::widgets::value_field(ui, v, 1.0..=100.0, "%", 58.0);
 }
 
+fn background_replacement_requested(app: &PhotocraftApp) -> bool {
+    matches!(
+        app.session.plan_ai_action(&app.ui.ai_prompt).map(|plan| plan.intent),
+        Ok(photocraft_engine::ai_action_plan::ActionIntent::CloudEdit(photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground))
+    )
+}
+
 /// Options bar for the retouching and smart-selection tools. Returns false for other tools.
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bool {
     if !tool.is_brushlike() && !matches!(tool, Tool::QuickSelection | Tool::ObjectSelection | Tool::Patch | Tool::ContentAwareMove | Tool::RedEye)
@@ -376,6 +383,14 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui, tool: Tool) -> bo
             }
             crate::widgets::vline(ui, 22.0);
             let response = ui.add_sized([220.0, 24.0], egui::TextEdit::singleline(&mut app.ui.ai_prompt).hint_text(tl!("Describe an edit…")));
+            if background_replacement_requested(app) {
+                opt(ui, tl!("Result:"));
+                let outputs = [
+                    (crate::cloud_ai_edit_ui::BackgroundOutputMode::SeparateLayers, tl!("Background on separate layer")),
+                    (crate::cloud_ai_edit_ui::BackgroundOutputMode::FullImage, tl!("Whole image on one layer")),
+                ];
+                crate::widgets::dropdown(ui, "ai-background-output", &mut app.ui.ai_background_output, &outputs, 190.0);
+            }
             if app.services.cloud_ai_edit.is_some() {
                 crate::widgets::checkbox(ui, &mut app.ui.ai_cloud_consent, tl!("Cloud AI (sends image pixels)"));
             }
@@ -452,6 +467,15 @@ mod tests {
         for x in (0..100).step_by(step) {
             app.run("paint.pencil", json!({"points": [[x, 0], [x, 60]], "size": 2, "color": "#606060", "target": target})).unwrap();
         }
+    }
+
+    #[test]
+    fn background_output_choice_is_offered_only_for_background_replacement_prompts() {
+        let mut app = app();
+        app.ui.ai_prompt = "замени фон на студийный".into();
+        assert!(background_replacement_requested(&app));
+        app.ui.ai_prompt = "улучши фото".into();
+        assert!(!background_replacement_requested(&app));
     }
 
     #[test]

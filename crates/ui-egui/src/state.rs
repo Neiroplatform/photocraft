@@ -943,6 +943,10 @@ pub struct UiState {
     /// configured cloud provider. Off by default and persisted as a UI choice.
     #[serde(skip)]
     pub ai_cloud_consent: bool,
+    /// Background-replacement result shape selected in the Object Selection
+    /// options bar. Separate editable layers are the privacy-preserving default.
+    #[serde(default)]
+    pub ai_background_output: crate::cloud_ai_edit_ui::BackgroundOutputMode,
     /// The status message is an error (shown in the warning colour).
     #[serde(default)]
     pub status_error: bool,
@@ -1022,6 +1026,7 @@ impl Default for UiState {
             status: String::new(),
             ai_prompt: String::new(),
             ai_cloud_consent: false,
+            ai_background_output: Default::default(),
             status_error: false,
             notices: Vec::new(),
             gpu_fallback_notice: None,

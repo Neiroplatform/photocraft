@@ -3302,3 +3302,6 @@ fontWeight	Italic	斜体
 	Run AI edit	AI 編集を実行
 	Cancel AI edit	AI 編集をキャンセル
 	Cloud AI (sends image pixels)	クラウド AI（画像のピクセルを送信）
+	Result:	結果:
+	Background on separate layer	背景を別レイヤーに
+	Whole image on one layer	画像全体を1つのレイヤーに

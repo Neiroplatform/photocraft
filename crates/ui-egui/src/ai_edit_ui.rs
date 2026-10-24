@@ -168,6 +168,7 @@ pub(crate) fn continue_after_selection(app: &mut PhotocraftApp, action: crate::s
                 plan,
                 photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground,
                 prompt.clone(),
+                Some(crate::cloud_ai_edit_ui::BackgroundOutputMode::SeparateLayers),
                 Some(key.clone()),
                 true,
             ),
@@ -217,7 +218,8 @@ pub fn run_prompt(app: &mut PhotocraftApp) {
             finish(app, Err("Enable ‘Cloud AI (sends image pixels)’ before running this edit.".into()));
             return;
         }
-        if kind == photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground && !has_selection(app) {
+        let background_output = (kind == photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground).then_some(app.ui.ai_background_output);
+        if background_output == Some(crate::cloud_ai_edit_ui::BackgroundOutputMode::SeparateLayers) && !has_selection(app) {
             let key = format!("ai-cloud-background-{}", app.ui.alloc_id());
             let continuation = crate::semantic_select_ui::AfterApply::ReplaceCloudBackground { key, prompt };
             match start_subject_selection(app, continuation.clone()) {
@@ -229,7 +231,7 @@ pub fn run_prompt(app: &mut PhotocraftApp) {
         }
         let coalesce =
             (kind == photocraft_engine::ai_action_plan::CloudEditKind::ReplaceBackground).then(|| format!("ai-cloud-background-{}", app.ui.alloc_id()));
-        if let Err(error) = crate::cloud_ai_edit_ui::start(app, plan, kind, prompt, coalesce, false) {
+        if let Err(error) = crate::cloud_ai_edit_ui::start(app, plan, kind, prompt, background_output, coalesce, false) {
             finish(app, Err(error));
         }
         return;
@@ -420,6 +422,33 @@ mod tests {
         assert!(crate::cloud_ai_edit_ui::cancel(&mut app));
         assert!(app.session.active().unwrap().doc.selection.is_none());
         assert_eq!(app.session.active().unwrap().history.past_len(), history);
+    }
+
+    #[test]
+    fn full_image_background_replacement_dispatches_without_local_subject_selection() {
+        let observed = Rc::new(RefCell::new(None));
+        let observed_for_cloud = observed.clone();
+        let cloud = move |request: crate::cloud_ai_edit_ui::Request| {
+            *observed_for_cloud.borrow_mut() = Some(request);
+            let (_sender, receiver) = std::sync::mpsc::channel();
+            Ok(receiver)
+        };
+        let mut app = PhotocraftApp::new(Session::new(), crate::Services { cloud_ai_edit: Some(Box::new(cloud)), ..Default::default() });
+        app.session.execute("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+        let history = app.session.active().unwrap().history.past_len();
+        app.ui.ai_cloud_consent = true;
+        app.ui.ai_background_output = crate::cloud_ai_edit_ui::BackgroundOutputMode::FullImage;
+        app.ui.ai_prompt = "замени фон на светлую студию".into();
+
+        run_prompt(&mut app);
+
+        let request = observed.borrow();
+        let request = request.as_ref().expect("cloud request");
+        assert_eq!(request.background_output, Some(crate::cloud_ai_edit_ui::BackgroundOutputMode::FullImage));
+        assert!(app.session.active().unwrap().doc.selection.is_none());
+        assert_eq!(app.session.active().unwrap().history.past_len(), history);
+        assert!(crate::cloud_ai_edit_ui::is_pending(&app));
+        assert!(!app.ui.status_error, "{}", app.ui.status);
     }
 
     #[test]

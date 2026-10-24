@@ -3385,3 +3385,6 @@ cameraRaw	Masking	Маскування
 	Run AI edit	Виконати ШІ-редагування
 	Cancel AI edit	Скасувати ШІ-редагування
 	Cloud AI (sends image pixels)	Хмарний ШІ (надсилає пікселі зображення)
+	Result:	Результат:
+	Background on separate layer	Фон на окремому шарі
+	Whole image on one layer	Усе зображення на одному шарі

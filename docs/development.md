@@ -389,19 +389,25 @@ Unsupported or incomplete text fails closed. Document-wide actions do not start 
 selection. Object removal requires an explicit selection, while automatic subject selection plus
 its requested edit remains one undo step.
 
-The web shell can also inject an explicitly consented cloud-image service. Background replacement
-is a layered operation rather than a full-frame repaint: Pixelle first obtains or reuses the local
-subject selection, keeps the original foreground pixels in memory, and sends only a PNG of the
-background. The subject area in that PNG has both alpha and RGB cleared. The provider is required
-to return the requested background with the transparent silhouette filled by solid `#00ff00`;
-Pixelle keys that colour only inside the authoritative local mask. The fully selected subject core
-stays clear on `AI Background`, while soft transition pixels use an opaque underlap reconstructed
-from nearby generated-background pixels so the two-layer source-over composite cannot contain an
-alpha seam. `Preserved Foreground` retains its authoritative alpha and fully selected pixels; only
-its soft fringe is locally colour-decontaminated. The generated layer stays below it and the old
-visible root layers are hidden. The provider response is fitted with one uniform scale and a centred
-crop, never independent X/Y scaling. Selection, request, layer assembly, cancellation, failure
-rollback and Undo remain bound to the exact document state and one coalesced history step.
+The web shell can also inject an explicitly consented cloud-image service. When the prompt requests
+background replacement, the options bar exposes two explicit result modes. **Background on a
+separate layer** is the default local-first path: Pixelle first obtains or reuses the local subject
+selection, keeps the original foreground pixels in memory, and sends only a PNG of the background.
+The subject area in that PNG has both alpha and RGB cleared. The provider is required to return the
+requested background with the transparent silhouette filled by solid `#00ff00`; Pixelle keys that
+colour only inside the authoritative local mask. The fully selected subject core stays clear on
+`AI Background`, while soft transition pixels use an opaque underlap reconstructed from nearby
+generated-background pixels so the two-layer source-over composite cannot contain an alpha seam.
+`Preserved Foreground` retains its authoritative alpha and fully selected pixels; only its soft
+fringe is locally colour-decontaminated.
+
+**Whole image on one layer** deliberately sends the complete flattened frame without requiring
+local subject selection and asks the provider for one opaque regenerated scene, without chroma,
+masks or cut-outs. The reply is fitted through the same registered square transport using one
+uniform scale and a centred crop, never independent X/Y scaling, then inserted as `AI Full Image`
+at the exact original document width and height. In both modes the generated result stays editable,
+the old visible source layers are hidden, and request validation, cancellation, failure rollback
+and Undo remain bound to the exact document state and one coalesced history step.
 
 
 ## Indexed Color timings
