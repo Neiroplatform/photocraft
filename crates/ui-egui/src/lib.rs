@@ -115,6 +115,7 @@ pub mod props_layout;
 pub mod proxy;
 pub mod puppet_ui;
 pub mod quick_pick;
+pub mod quick_tools_ui;
 pub mod rasterize_prompt;
 pub mod retouch_ui;
 mod rgb_histogram;
@@ -339,6 +340,9 @@ pub struct PhotocraftApp {
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
+    /// Standalone upload → process → download presentation selected by one of
+    /// the packaged Quick Tools entrypoints. `None` keeps the complete editor.
+    pub quick_tool: Option<quick_tools_ui::State>,
     /// Inference reply waiting outside the UI thread, bound to the document
     /// revision that produced its preview.
     pub(crate) semantic_select_pending: Option<semantic_select_ui::Pending>,
@@ -531,6 +535,7 @@ impl PhotocraftApp {
             session,
             ui: UiState::default(),
             services,
+            quick_tool: None,
             semantic_select_pending: None,
             cloud_ai_edit_pending: None,
             canvases: HashMap::new(),
@@ -1100,6 +1105,21 @@ impl eframe::App for PhotocraftApp {
         if cloud_ai_edit_ui::is_pending(self) {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+        // Quick Tools deliberately share the document/AI runtime but not the
+        // editor shell. Keep their loop free of GPU canvas checks, native
+        // menus, transforms and editor shortcuts; uploads and paste still
+        // arrive through the ordinary inbox boundary.
+        if self.quick_tool.is_some() {
+            let arrived: Vec<(String, Vec<u8>)> =
+                self.services.inbox.as_ref().map(|queue| std::mem::take(&mut *queue.lock().unwrap_or_else(|error| error.into_inner()))).unwrap_or_default();
+            for (name, bytes) in arrived {
+                if let Err(error) = self.open_bytes(&name, &bytes) {
+                    self.open_failed(&name, &error);
+                }
+            }
+            self.poll_file_dialog(ctx, Some(frame));
+            return;
+        }
         self.check_gpu(ctx);
         #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
         if self.live_tokens.poll(ctx, self.ui.theme) {
@@ -1180,6 +1200,11 @@ impl eframe::App for PhotocraftApp {
         if !self.fonts_ready {
             ctx.request_repaint();
             self.automation_input = false;
+            return;
+        }
+        if self.quick_tool.is_some() {
+            quick_tools_ui::show(self, ui);
+            self.poll_file_dialog(ui.ctx(), Some(frame));
             return;
         }
         let t0 = gpu_canvas::now_ms();

@@ -79,6 +79,11 @@ pub fn start() {
         }
         let pen_target = canvas.clone();
         let paste_target = document.clone();
+        let pathname = document.location().and_then(|location| location.pathname().ok()).unwrap_or_default();
+        let quick_route = photocraft_ui_egui::quick_tools_ui::route_from_path(&pathname);
+        if let Some(route) = quick_route {
+            document.set_title(route.browser_title());
+        }
         let result = eframe::WebRunner::new()
             .start(
                 canvas,
@@ -92,6 +97,9 @@ pub fn start() {
                     let semantic = preload_semantic_model(cc.egui_ctx.clone());
                     let cloud_ai = cloud_ai_service(cc.egui_ctx.clone());
                     let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), semantic, cloud_ai));
+                    if let Some(route) = quick_route {
+                        app.quick_tool = Some(photocraft_ui_egui::quick_tools_ui::State::new(route));
+                    }
                     listen_pen(&pen_target, app.stylus.feed.clone());
                     listen_image_paste(&paste_target, clipboard.clone(), cc.egui_ctx.clone());
                     app.set_theme(&cc.egui_ctx, ThemeKind::Pro);

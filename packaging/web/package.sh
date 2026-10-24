@@ -19,6 +19,21 @@ fi
 SITE="$ROOT/dist/web"
 [ -f "$SITE/index.html" ] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
 
+# Keep the complete editor's public path explicit alongside the task pages.
+cp "$SITE/index.html" "$SITE/patchy.html"
+
+# Every Quick Tool has a stable standalone URL but loads the same exact WASM
+# runtime. The runtime chooses its closed task route from the packaged file name.
+QUICK_TOOL_PAGES=(
+  quick-tools
+  remove-background blur-background extract-object remove-object
+  auto-enhance denoise sharpen resize-image expand-canvas
+  replace-background relight restyle generative-fill
+)
+for page in "${QUICK_TOOL_PAGES[@]}"; do
+  cp "$SITE/index.html" "$SITE/$page.html"
+done
+
 # MobileSAM is a runtime asset, not embedded in the UI wasm. Pin and verify the
 # exact candidate, then shard it below common 25 MiB CDN per-file limits.
 MODEL_REV="8b4cb7c743f3b3cb8afd212a86ae15b1bbfdac97"

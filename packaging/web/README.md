@@ -5,16 +5,21 @@ static site in `photocraft-web-<version>/`:
 
 | File | What it is |
 |---|---|
-| `index.html` | The page. It loads everything through relative URLs. |
+| `index.html`, `patchy.html` | The complete editor entrypoint. It loads everything through relative URLs. |
+| `quick-tools.html` | Minimal catalog of standalone upload → process → download workflows. |
+| `remove-background.html` … `generative-fill.html` | Stable task-specific Quick Tool entrypoints over the same exact runtime. |
 | `photocraft-web-<hash>.js` | wasm-bindgen glue (generated, ES module) |
 | `photocraft-web-<hash>_bg.wasm` | The app: about 19 MiB raw, 8 MiB with gzip, 5.6 MiB with Brotli (see [Sizes](#sizes)) |
 | `photocraft-ml-worker_loader.js`, `photocraft-ml-worker.js`, `photocraft-ml-worker_bg.wasm` | Generated loader/glue and isolated Rust/WASM MobileSAM inference worker |
-| `models/mobile-sam-tiny-vitt.safetensors.part-*` | Five verified static model shards, loaded immediately after editor startup |
+| `models/mobile-sam-tiny-vitt.safetensors.part-*` | Five verified static model shards, loaded immediately after editor or Quick Tool startup |
 | `LICENSE-APACHE`, `NOTICE`, `ATTRIBUTION.md` | Model/runtime licence and provenance notices |
 | `_headers`, `.htaccess` | Sample header rules for Netlify/Cloudflare Pages and Apache |
 | `fonts/` (optional) | Fonts loaded on demand, listed in `fonts/manifest.txt` (see [Fonts](#fonts)) |
 
 There is no server-side code. Upload the folder's contents anywhere that serves static files.
+Quick Tools reuse the editor's local engine and semantic worker; cloud-labelled
+tools use the host's existing same-origin Pixelle AI gateway and require an
+explicit pixel-egress acknowledgement in the page.
 
 ## Docker
 

@@ -8,6 +8,17 @@
   <link rel="icon" type="image/svg+xml" href="pixelle.svg">
   <link data-trunk rel="rust" href="Cargo.toml" data-bin="photocraft-ml-worker" data-type="worker" data-loader-shim data-cargo-features="ml-worker" data-cargo-profile="wasm-release" data-wasm-opt="z" />
   <link data-trunk rel="rust" data-bin="photocraft-web" data-cargo-profile="wasm-release" data-cargo-features="heif" data-wasm-opt="z" data-weak-refs />
+  <script>
+    const pixelleQuickTool = /\/(quick-tools|remove-background|blur-background|extract-object|remove-object|auto-enhance|denoise|sharpen|resize-image|expand-canvas|replace-background|relight|restyle|generative-fill)\.html$/.test(location.pathname);
+    if (pixelleQuickTool) {
+      document.documentElement.classList.add('pixelle-quick-tool');
+      document.documentElement.lang = 'ru';
+      addEventListener('DOMContentLoaded', () => {
+        document.querySelector('#photocraft_loading > p:first-child').textContent = 'Загружаем Pixelle…';
+        document.getElementById('photocraft_stalled').innerHTML = 'Загрузка занимает больше времени, чем обычно. <a href="">Перезагрузите страницу</a>, чтобы попробовать ещё раз.';
+      });
+    }
+  </script>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #262626; }
     #photocraft_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -19,6 +30,10 @@
        this page, no Rust runs to say so, so the page itself shows what to do after a while. */
     #photocraft_stalled { color: #8c8c8c; visibility: hidden; animation: photocraft-stalled 0s 20s forwards; }
     @keyframes photocraft-stalled { to { visibility: visible; } }
+    html.pixelle-quick-tool, html.pixelle-quick-tool body { background: #f3f1ea; }
+    html.pixelle-quick-tool #photocraft_loading { color: #65675f; }
+    html.pixelle-quick-tool #photocraft_stalled { color: #85877f; }
+    html.pixelle-quick-tool #photocraft_loading a { color: #171914; }
   </style>
 </head>
 <body>
