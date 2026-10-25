@@ -1069,6 +1069,10 @@
         {
           "name": "cargo:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "cargo:features",
+          "value": "std"
         }
       ],
       "purl": "pkg:cargo/crypto-common@0.1.7",
@@ -1152,7 +1156,7 @@
         },
         {
           "name": "cargo:features",
-          "value": "block-buffer,core-api,default"
+          "value": "alloc,block-buffer,core-api,default,std"
         }
       ],
       "purl": "pkg:cargo/digest@0.10.7",
@@ -5443,6 +5447,10 @@
         {
           "name": "cargo:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "cargo:features",
+          "value": "default,std"
         }
       ],
       "purl": "pkg:cargo/sha2@0.10.9",
@@ -7050,7 +7058,7 @@
         },
         {
           "name": "cargo:features",
-          "value": "AbortController,AbortSignal,AddEventListenerOptions,AngleInstancedArrays,BeforeUnloadEvent,BinaryType,Blob,BlobPropertyBag,Clipboard,ClipboardEvent,ClipboardItem,CompositionEvent,CssStyleDeclaration,DataTransfer,DataTransferItem,DataTransferItemList,DedicatedWorkerGlobalScope,Document,DocumentFragment,DomException,DomRect,DomRectReadOnly,DragEvent,Element,ErrorEvent,Event,EventListener,EventTarget,ExtBlendMinmax,ExtColorBufferFloat,ExtColorBufferHalfFloat,ExtDisjointTimerQuery,ExtFragDepth,ExtSRgb,ExtShaderTextureLod,ExtTextureFilterAnisotropic,File,FileList,FileReader,FocusEvent,FocusOptions,Headers,HtmlAnchorElement,HtmlButtonElement,HtmlCanvasElement,HtmlElement,HtmlImageElement,HtmlInputElement,HtmlMediaElement,HtmlVideoElement,ImageBitmap,ImageBitmapOptions,ImageBitmapRenderingContext,ImageData,InputEvent,IntersectionObserver,IntersectionObserverEntry,KeyboardEvent,Location,MediaQueryList,MediaQueryListEvent,MessageChannel,MessageEvent,MessagePort,MouseEvent,Navigator,Node,NodeList,OesElementIndexUint,OesStandardDerivatives,OesTextureFloat,OesTextureFloatLinear,OesTextureHalfFloat,OesTextureHalfFloatLinear,OesVertexArrayObject,OffscreenCanvas,OrientationLockType,OrientationType,OvrMultiview2,PageTransitionEvent,Performance,PermissionState,PermissionStatus,Permissions,PointerEvent,PremultiplyAlpha,Request,RequestInit,ResizeObserver,ResizeObserverBoxOptions,ResizeObserverEntry,ResizeObserverOptions,ResizeObserverSize,Response,Screen,ScreenOrientation,ShadowRoot,Storage,Touch,TouchEvent,TouchList,UiEvent,Url,UserActivation,VideoFrame,VisibilityState,WebGl2RenderingContext,WebGlActiveInfo,WebGlBuffer,WebGlFramebuffer,WebGlProgram,WebGlQuery,WebGlRenderbuffer,WebGlRenderingContext,WebGlSampler,WebGlShader,WebGlShaderPrecisionFormat,WebGlSync,WebGlTexture,WebGlTransformFeedback,WebGlUniformLocation,WebGlVertexArrayObject,WebglColorBufferFloat,WebglCompressedTextureAstc,WebglCompressedTextureEtc,WebglCompressedTextureEtc1,WebglCompressedTexturePvrtc,WebglCompressedTextureS3tc,WebglCompressedTextureS3tcSrgb,WebglDebugRendererInfo,WebglDebugShaders,WebglDepthTexture,WebglDrawBuffers,WebglLoseContext,WheelEvent,Window,Worker,WorkerGlobalScope,WorkerNavigator,console,default,std"
+          "value": "AbortController,AbortSignal,AddEventListenerOptions,AngleInstancedArrays,BeforeUnloadEvent,BinaryType,Blob,BlobPropertyBag,Clipboard,ClipboardEvent,ClipboardItem,CompositionEvent,CssStyleDeclaration,DataTransfer,DataTransferItem,DataTransferItemList,DedicatedWorkerGlobalScope,Document,DocumentFragment,DomException,DomRect,DomRectReadOnly,DragEvent,Element,ErrorEvent,Event,EventListener,EventTarget,ExtBlendMinmax,ExtColorBufferFloat,ExtColorBufferHalfFloat,ExtDisjointTimerQuery,ExtFragDepth,ExtSRgb,ExtShaderTextureLod,ExtTextureFilterAnisotropic,File,FileList,FileReader,FocusEvent,FocusOptions,Headers,HtmlAnchorElement,HtmlButtonElement,HtmlCanvasElement,HtmlElement,HtmlImageElement,HtmlInputElement,HtmlMediaElement,HtmlVideoElement,ImageBitmap,ImageBitmapOptions,ImageBitmapRenderingContext,ImageData,InputEvent,IntersectionObserver,IntersectionObserverEntry,KeyboardEvent,Location,MediaQueryList,MediaQueryListEvent,MessageChannel,MessageEvent,MessagePort,MouseEvent,Navigator,Node,NodeList,OesElementIndexUint,OesStandardDerivatives,OesTextureFloat,OesTextureFloatLinear,OesTextureHalfFloat,OesTextureHalfFloatLinear,OesVertexArrayObject,OffscreenCanvas,OrientationLockType,OrientationType,OvrMultiview2,PageTransitionEvent,Performance,PermissionState,PermissionStatus,Permissions,PointerEvent,PremultiplyAlpha,Request,RequestCredentials,RequestInit,ResizeObserver,ResizeObserverBoxOptions,ResizeObserverEntry,ResizeObserverOptions,ResizeObserverSize,Response,Screen,ScreenOrientation,ShadowRoot,Storage,Touch,TouchEvent,TouchList,UiEvent,Url,UserActivation,VideoFrame,VisibilityState,WebGl2RenderingContext,WebGlActiveInfo,WebGlBuffer,WebGlFramebuffer,WebGlProgram,WebGlQuery,WebGlRenderbuffer,WebGlRenderingContext,WebGlSampler,WebGlShader,WebGlShaderPrecisionFormat,WebGlSync,WebGlTexture,WebGlTransformFeedback,WebGlUniformLocation,WebGlVertexArrayObject,WebglColorBufferFloat,WebglCompressedTextureAstc,WebglCompressedTextureEtc,WebglCompressedTextureEtc1,WebglCompressedTexturePvrtc,WebglCompressedTextureS3tc,WebglCompressedTextureS3tcSrgb,WebglDebugRendererInfo,WebglDebugShaders,WebglDepthTexture,WebglDrawBuffers,WebglLoseContext,WheelEvent,Window,Worker,WorkerGlobalScope,WorkerNavigator,console,default,std"
         }
       ],
       "purl": "pkg:cargo/web-sys@0.3.106",
@@ -9372,6 +9380,7 @@
         "pkg:cargo/rfd@0.17.2",
         "pkg:cargo/serde-wasm-bindgen@0.6.5",
         "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/sha2@0.10.9",
         "pkg:cargo/wasm-bindgen-futures@0.4.79",
         "pkg:cargo/wasm-bindgen@0.2.129",
         "pkg:cargo/web-sys@0.3.106"
@@ -10581,7 +10590,7 @@
     "properties": [
       {
         "name": "photocraft:cargo-lock-sha256",
-        "value": "58871d3fce383de209b4d6392f03dbf484c327349a5e3ae522aaaa109b3c61b5"
+        "value": "629e6f04c43587b562a6fea80de77c698aab4354015a25a11ce0a22679545a96"
       },
       {
         "name": "photocraft:target",
