@@ -73,6 +73,14 @@ mod tests {
     }
 
     #[test]
+    fn checkout_tokenizes_the_card_and_discloses_cancellation() {
+        let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("tokenize: true"));
+        assert!(commerce.contains("Будущие платежи можно отменить"));
+        assert!(commerce.contains("фактическому расходу токенов"));
+    }
+
+    #[test]
     fn firefox_uses_the_stable_webgl_backend_unless_webgpu_is_explicit() {
         let firefox = "Mozilla/5.0 Gecko/20100101 Firefox/145.0";
         assert!(use_webgl("", firefox));

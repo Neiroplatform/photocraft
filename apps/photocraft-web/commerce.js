@@ -144,6 +144,7 @@
         amount: order.amount,
         externalId: order.orderId,
         receiptEmail: order.email,
+        tokenize: true,
         userInfo: { accountId: order.accountId, email: order.email },
         receipt: order.receipt
       });
@@ -190,7 +191,7 @@
           <label><input id="pixelle-terms" type="checkbox"><span>Принимаю <a href="pixelle-offer.html" target="_blank" rel="noreferrer">оферту</a>, <a href="pixelle-rules.html" target="_blank" rel="noreferrer">правила сервиса</a> и <a href="pixelle-privacy.html" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</span></label>
         </div>
         <button class="px-commerce-primary" type="button" disabled>Оплатить картой</button>
-        <p class="px-commerce-note">Лимит облачного ИИ считается по стоимости реально разрешённых операций. Сверх 300 ₽ списаний за генерацию нет.</p>
+        <p class="px-commerce-note">Лимит облачного ИИ считается по фактическому расходу токенов; перед запуском Pixelle резервирует не больше указанной для операции максимальной суммы. Сверх 300 ₽ списаний за генерацию нет. Будущие платежи можно отменить в профиле Pixelle Pro; доступ сохранится до конца оплаченного периода.</p>
       </div>`;
     card.append(closeButton());
     const consent = card.querySelector("#pixelle-terms");
