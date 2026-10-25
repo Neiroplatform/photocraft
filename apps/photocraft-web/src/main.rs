@@ -78,6 +78,8 @@ mod tests {
         assert!(commerce.contains("tokenize: true"));
         assert!(commerce.contains("Будущие платежи можно отменить"));
         assert!(commerce.contains("фактическому расходу токенов"));
+        assert!(commerce.contains("status.cancelAtPeriodEnd"));
+        assert!(commerce.contains("Будущие списания отменены"));
     }
 
     #[test]

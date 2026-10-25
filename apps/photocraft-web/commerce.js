@@ -248,9 +248,12 @@
     const receiptItems = receipts.length
       ? receipts.map((receipt) => { const url = receiptUrl(receipt.ofd_receipt_url); return `<li>${new Date(receipt.created_at).toLocaleDateString("ru-RU")} · ${(Number(receipt.amount_kopecks || 0) / 100).toLocaleString("ru-RU")} ₽${url ? ` · <a href="${url}" target="_blank" rel="noreferrer">Открыть чек</a>` : " · чек обрабатывается"}</li>`; }).join("")
       : "<li>Чеков пока нет</li>";
-    card.innerHTML = `<div class="px-commerce-stripe"></div><div class="px-commerce-head"><h2>Pixelle Pro</h2><p>Статус: ${status.status === "trial" ? "пробный период" : "активна"}</p></div><div class="px-commerce-body"><ul class="px-commerce-benefits"><li>Локальные проекты: ${project.used} из ${project.limit}</li><li>Облачный ИИ: ${(cloud.used / 100).toLocaleString("ru-RU")} ₽ из ${(cloud.limit / 100).toLocaleString("ru-RU")} ₽</li><li>Период до: ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "—"}</li></ul><h3>Фискальные чеки</h3><ul>${receiptItems}</ul><button class="px-commerce-primary" data-action="cancel" type="button">Отменить будущие списания</button><p class="px-commerce-note">Доступ сохранится до конца уже оплаченного периода.</p></div>`;
+    const cancellation = status.cancelAtPeriodEnd
+      ? `<p class="px-commerce-note">Будущие списания отменены. Доступ сохранится до ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "конца оплаченного периода"}.</p>`
+      : `<button class="px-commerce-primary" data-action="cancel" type="button">Отменить будущие списания</button><p class="px-commerce-note">Доступ сохранится до конца уже оплаченного периода.</p>`;
+    card.innerHTML = `<div class="px-commerce-stripe"></div><div class="px-commerce-head"><h2>Pixelle Pro</h2><p>Статус: ${status.status === "trial" ? "пробный период" : "активна"}</p></div><div class="px-commerce-body"><ul class="px-commerce-benefits"><li>Локальные проекты: ${project.used} из ${project.limit}</li><li>Облачный ИИ: ${(cloud.used / 100).toLocaleString("ru-RU")} ₽ из ${(cloud.limit / 100).toLocaleString("ru-RU")} ₽</li><li>Период до: ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "—"}</li></ul><h3>Фискальные чеки</h3><ul>${receiptItems}</ul>${cancellation}</div>`;
     card.append(closeButton());
-    card.querySelector('[data-action="cancel"]').addEventListener("click", async (event) => {
+    card.querySelector('[data-action="cancel"]')?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
       try { await request("/subscription/cancel", { method: "POST" }); closeLayer(); }
