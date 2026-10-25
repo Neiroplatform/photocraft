@@ -1,0 +1,48 @@
+:root {
+  color-scheme: dark;
+  --px-accent: #b9f227;
+  --px-accent-strong: #93d60c;
+  --px-panel: #242629;
+  --px-panel-2: #191b1e;
+  --px-border: #45494f;
+  --px-text: #f4f6f7;
+  --px-muted: #a8adb4;
+}
+
+.px-commerce-layer { position: fixed; inset: 0; z-index: 2147483000; font: 14px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; color: var(--px-text); }
+.px-commerce-backdrop { position: absolute; inset: 0; background: rgba(9, 10, 12, .72); backdrop-filter: blur(8px); display: grid; place-items: center; padding: 20px; }
+.px-commerce-card { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; border: 1px solid var(--px-border); border-radius: 18px; background: linear-gradient(180deg, #2b2e32, var(--px-panel)); box-shadow: 0 28px 90px rgba(0,0,0,.52); position: relative; }
+.px-commerce-stripe { height: 5px; background: linear-gradient(90deg, var(--px-accent), #e4ff95); border-radius: 18px 18px 0 0; }
+.px-commerce-head { padding: 28px 30px 18px; }
+.px-commerce-head h2 { margin: 0 38px 8px 0; font-size: 28px; line-height: 1.12; letter-spacing: -.025em; }
+.px-commerce-head p { margin: 0; color: var(--px-muted); }
+.px-commerce-close { position: absolute; top: 18px; right: 18px; width: 34px; height: 34px; border: 1px solid var(--px-border); border-radius: 10px; background: #1c1e21; color: var(--px-text); font-size: 22px; cursor: pointer; }
+.px-commerce-body { padding: 0 30px 30px; }
+.px-commerce-price { display: flex; align-items: baseline; gap: 9px; margin: 10px 0 20px; }
+.px-commerce-price strong { font-size: 38px; letter-spacing: -.04em; }
+.px-commerce-price span { color: var(--px-muted); }
+.px-commerce-benefits { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; }
+.px-commerce-benefits li { display: flex; gap: 10px; }
+.px-commerce-benefits li::before { content: ""; width: 9px; height: 9px; margin-top: 6px; flex: none; border-radius: 3px; background: var(--px-accent); box-shadow: 0 0 0 3px rgba(185,242,39,.12); }
+.px-commerce-consent { display: grid; gap: 12px; padding: 16px; border: 1px solid #3a3e43; background: #1d1f22; border-radius: 12px; color: #c8ccd1; font-size: 12px; }
+.px-commerce-consent label { display: flex; align-items: flex-start; gap: 9px; }
+.px-commerce-consent input { margin-top: 2px; accent-color: var(--px-accent-strong); }
+.px-commerce-consent a { color: #d8ff78; }
+.px-commerce-primary { width: 100%; min-height: 48px; margin-top: 18px; border: 0; border-radius: 12px; background: var(--px-accent); color: #161a0b; font-weight: 750; cursor: pointer; }
+.px-commerce-primary:hover { background: #c8ff3f; }
+.px-commerce-primary:disabled { cursor: not-allowed; opacity: .42; }
+.px-commerce-note { margin: 14px 0 0; color: var(--px-muted); font-size: 12px; }
+.px-commerce-error { margin: 14px 0 0; padding: 11px 12px; border-radius: 10px; background: rgba(231,76,60,.14); color: #ffc0ba; }
+.px-commerce-auth { width: min(480px, calc(100vw - 32px)); height: min(720px, calc(100vh - 40px)); border: 1px solid var(--px-border); border-radius: 18px; overflow: hidden; background: white; position: relative; }
+.px-commerce-auth iframe { width: 100%; height: 100%; border: 0; }
+.px-commerce-auth .px-commerce-close { z-index: 2; }
+.px-commerce-fab { position: fixed; z-index: 2147482000; bottom: 20px; border: 1px solid #4a4f55; background: #24272b; color: white; box-shadow: 0 10px 32px rgba(0,0,0,.38); cursor: pointer; }
+.px-commerce-fab:hover { border-color: var(--px-accent); }
+#pixelle-pro-button { right: 76px; height: 42px; padding: 0 16px; border-radius: 12px; font-weight: 700; color: #dfff8b; }
+#pixelle-support-button { right: 20px; width: 42px; height: 42px; border-radius: 50%; font-size: 19px; }
+.px-support-form { display: grid; gap: 12px; }
+.px-support-form input, .px-support-form select, .px-support-form textarea { width: 100%; box-sizing: border-box; border: 1px solid #484d53; border-radius: 10px; background: #181a1d; color: white; padding: 11px 12px; font: inherit; }
+.px-support-form textarea { min-height: 140px; resize: vertical; }
+.px-support-success { padding: 18px; border-radius: 12px; background: rgba(185,242,39,.10); color: #e1ff9b; }
+@media (max-width: 620px) { .px-commerce-head, .px-commerce-body { padding-left: 20px; padding-right: 20px; } #pixelle-pro-button { right: 70px; } }
+@media (prefers-reduced-motion: reduce) { .px-commerce-layer * { scroll-behavior: auto !important; } }

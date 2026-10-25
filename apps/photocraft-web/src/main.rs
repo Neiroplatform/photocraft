@@ -46,14 +46,17 @@ mod tests {
 
     /// A WebAssembly module that never downloads (or doesn't match the page) runs no Rust, so the
     /// page itself replaces the endless "Loading" with what may have gone wrong and a way to
-    /// retry, without a hand-written script.
+    /// retry. The only hand-written script is the independent commerce shell; Trunk still owns
+    /// the editor's generated loader.
     #[test]
     fn loading_page_offers_a_reload_when_startup_stalls() {
         let html = include_str!("../index.html");
         let (_, hint) = html.split_once("<p id=\"photocraft_stalled\">").expect("stalled-startup hint in the loading element");
         assert!(hint.contains("failed to") && hint.contains("<a href=\"\">Reload</a>"), "{hint}");
         assert!(html.contains("animation: photocraft-stalled"), "the hint appears after a delay");
-        assert!(!html.contains("<script"), "trunk injects the generated loader; the page has no script of its own");
+        let scripts: Vec<_> = html.match_indices("<script").collect();
+        assert_eq!(scripts.len(), 1, "only the commerce shell may be hand-written; Trunk injects the editor loader");
+        assert!(html.contains("<script src=\"commerce.js\" defer></script>"));
     }
 
     #[test]
@@ -67,6 +70,16 @@ mod tests {
         for legacy in ["PhotoCraft", "ArtCraft", "Join us on Discord", "github.com/storytold"] {
             assert!(!html.contains(legacy), "legacy public branding remains: {legacy}");
         }
+    }
+
+    #[test]
+    fn checkout_tokenizes_the_card_and_discloses_cancellation() {
+        let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("tokenize: true"));
+        assert!(commerce.contains("Будущие платежи можно отменить"));
+        assert!(commerce.contains("фактическому расходу токенов"));
+        assert!(commerce.contains("status.cancelAtPeriodEnd"));
+        assert!(commerce.contains("Будущие списания отменены"));
     }
 
     #[test]
@@ -84,5 +97,15 @@ mod tests {
         assert!(query_flag("?webgl", "webgl"));
         assert!(query_flag("?mode=edit&webgl=1", "webgl"));
         assert!(!query_flag("?notwebgl=1", "webgl"));
+    }
+
+    #[test]
+    fn project_quota_is_applied_only_after_import_validation_and_skips_presets() {
+        let web = include_str!("web.rs");
+        assert!(web.contains("photocraft_io::import(name, bytes)"));
+        assert!(web.contains("meter_local_project(bytes).await"));
+        assert!(web.contains("PRESET_LIBRARY_EXTS"));
+        assert!(web.contains("authorize_opened_project(&name, &bytes).await"));
+        assert!(!web.contains("Ok(bytes) => meter_local_project(&bytes).await"));
     }
 }

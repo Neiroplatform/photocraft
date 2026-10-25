@@ -5,7 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>Pixelle</title>
   <link data-trunk rel="copy-file" href="../../assets/app-icon/pixelle.svg">
+  <link data-trunk rel="copy-file" href="favicon.ico">
+  <link data-trunk rel="copy-file" href="apple-touch-icon.png">
+  <link data-trunk rel="copy-file" href="commerce.css">
+  <link data-trunk rel="copy-file" href="commerce.js">
+  <link data-trunk rel="copy-file" href="pixelle-legal.css">
+  <link data-trunk rel="copy-file" href="pixelle-offer.html">
+  <link data-trunk rel="copy-file" href="pixelle-rules.html">
+  <link data-trunk rel="copy-file" href="pixelle-privacy.html">
   <link rel="icon" type="image/svg+xml" href="pixelle.svg">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="commerce.css">
   <link data-trunk rel="rust" href="Cargo.toml" data-bin="photocraft-ml-worker" data-type="worker" data-loader-shim data-cargo-features="ml-worker" data-cargo-profile="wasm-release" data-wasm-opt="z" />
   <link data-trunk rel="rust" data-bin="photocraft-web" data-cargo-profile="wasm-release" data-cargo-features="heif" data-wasm-opt="z" data-weak-refs />
   <style>
@@ -29,5 +40,6 @@
       download or come from a different version of this page. <a href="">Reload</a> to try again; the browser
       console lists what failed.</p>
   </div>
+  <script src="commerce.js" defer></script>
 </body>
 </html>
