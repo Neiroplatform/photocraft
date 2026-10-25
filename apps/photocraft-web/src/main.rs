@@ -88,4 +88,14 @@ mod tests {
         assert!(query_flag("?mode=edit&webgl=1", "webgl"));
         assert!(!query_flag("?notwebgl=1", "webgl"));
     }
+
+    #[test]
+    fn project_quota_is_applied_only_after_import_validation_and_skips_presets() {
+        let web = include_str!("web.rs");
+        assert!(web.contains("photocraft_io::import(name, bytes)"));
+        assert!(web.contains("meter_local_project(bytes).await"));
+        assert!(web.contains("PRESET_LIBRARY_EXTS"));
+        assert!(web.contains("authorize_opened_project(&name, &bytes).await"));
+        assert!(!web.contains("Ok(bytes) => meter_local_project(&bytes).await"));
+    }
 }

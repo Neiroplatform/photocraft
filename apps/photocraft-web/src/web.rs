@@ -38,6 +38,7 @@ const OPEN_EXTS: &[&str] = &[
     "pfm", "heic", "heif", "hif", "dng", "cr2", "cr3", "nef", "nrw", "arw", "pef", "orf", "rw2", "raf", "abr", "grd", "svg", "svgz", "aco", "ase", "af",
     "afdesign", "afphoto", "afpub",
 ];
+const PRESET_LIBRARY_EXTS: &[&str] = &["abr", "grd", "aco", "ase"];
 const CANVAS_ID: &str = "photocraft_canvas";
 
 /// Fonts the host serves next to the page (`photocraft_ui_egui::served_fonts`): craft-fonts' manifest
@@ -161,7 +162,7 @@ fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egu
                 .map(|buffer| js_sys::Uint8Array::new(&buffer).to_vec())
                 .map_err(|error| format!("Could not read the pasted image: {error:?}"));
             let bytes = match bytes {
-                Ok(bytes) => meter_local_project(&bytes).await.map(|()| bytes),
+                Ok(bytes) => authorize_opened_project(&name, &bytes).await.map(|()| bytes),
                 Err(error) => Err(error),
             };
             clipboard.lock().unwrap_or_else(|error| error.into_inner()).arrived.push((request, bytes.map(|bytes| (name, bytes))));
@@ -496,6 +497,22 @@ async fn meter_local_project(bytes: &[u8]) -> Result<(), String> {
     })
 }
 
+fn is_preset_library(name: &str) -> bool {
+    let extension = std::path::Path::new(name).extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+    PRESET_LIBRARY_EXTS.contains(&extension.as_str())
+}
+
+/// Validate through the canonical importer before consuming a project slot.
+/// Preset-library imports are editor resources, not image projects, and never
+/// count against the period allowance.
+async fn authorize_opened_project(name: &str, bytes: &[u8]) -> Result<(), String> {
+    if is_preset_library(name) {
+        return Ok(());
+    }
+    photocraft_io::import(name, bytes).map_err(|error| format!("Could not open {name}: {error}"))?;
+    meter_local_project(bytes).await
+}
+
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
 /// so the app's own drop path can't handle them) and feed them through the inbox.
 struct WebShell {
@@ -601,7 +618,7 @@ impl eframe::App for WebShell {
             wasm_bindgen_futures::spawn_local(async move {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped".into());
                 match f.bytes_async().await {
-                    Ok(bytes) => match meter_local_project(&bytes).await {
+                    Ok(bytes) => match authorize_opened_project(&name, &bytes).await {
                         Ok(()) => {
                             inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                             ctx.request_repaint();
@@ -663,7 +680,7 @@ fn services(
                 let answer = match picked {
                     Some(file) => {
                         let bytes = file.read().await;
-                        match meter_local_project(&bytes).await {
+                        match authorize_opened_project(&file.file_name(), &bytes).await {
                             Ok(()) => Some(FileDialogAnswer::Contents(file.file_name(), bytes)),
                             Err(error) => {
                                 log::warn!("couldn't authorize opened project: {error}");
@@ -823,4 +840,19 @@ fn screen_color_service() -> Option<photocraft_ui_egui::screen_picker::Service> 
         }
         Pending { receiver: rx, cancelled }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_preset_library;
+
+    #[test]
+    fn preset_libraries_do_not_consume_image_project_slots() {
+        for name in ["brush.ABR", "gradient.grd", "swatches.aco", "palette.ase"] {
+            assert!(is_preset_library(name), "{name}");
+        }
+        for name in ["photo.png", "design.psd", "document.pcraft", "vector.svg"] {
+            assert!(!is_preset_library(name), "{name}");
+        }
+    }
 }
