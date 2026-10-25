@@ -11,6 +11,7 @@ use photocraft_engine::Session;
 use photocraft_ui_egui::served_fonts;
 use photocraft_ui_egui::theme::ThemeKind;
 use photocraft_ui_egui::{FileDialogAnswer, FileDialogRequest, PhotocraftApp, Services};
+use sha2::{Digest as _, Sha256};
 use wasm_bindgen::JsCast as _;
 
 type Inbox = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
@@ -159,6 +160,10 @@ fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egu
                 .await
                 .map(|buffer| js_sys::Uint8Array::new(&buffer).to_vec())
                 .map_err(|error| format!("Could not read the pasted image: {error:?}"));
+            let bytes = match bytes {
+                Ok(bytes) => meter_local_project(&bytes).await.map(|()| bytes),
+                Err(error) => Err(error),
+            };
             clipboard.lock().unwrap_or_else(|error| error.into_inner()).arrived.push((request, bytes.map(|bytes| (name, bytes))));
             ctx.request_repaint();
         });
@@ -357,6 +362,7 @@ async fn request_cloud_ai(request: photocraft_ui_egui::cloud_ai_edit_ui::Request
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
+    let authorization_id = authorize_cloud_ai(cloud_operation(request.kind)).await?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&request.image_png);
     let mask = request.mask_png.as_ref().map(|value| base64::engine::general_purpose::STANDARD.encode(value));
     let body = serde_json::to_string(&serde_json::json!({
@@ -365,6 +371,7 @@ async fn request_cloud_ai(request: photocraft_ui_egui::cloud_ai_edit_ui::Request
         "image_base64": encoded,
         "mask_base64": mask,
         "background_output": request.background_output,
+        "authorization_id": authorization_id,
     }))
     .map_err(|error| error.to_string())?;
     let init = web_sys::RequestInit::new();
@@ -394,6 +401,99 @@ async fn request_cloud_ai(request: photocraft_ui_egui::cloud_ai_edit_ui::Request
     let image_png = base64::engine::general_purpose::STANDARD.decode(image).map_err(|_| "Cloud edit response contained invalid image data".to_string())?;
     let model = value.get("model").and_then(serde_json::Value::as_str).unwrap_or("configured model").to_string();
     Ok(photocraft_ui_egui::cloud_ai_edit_ui::Response { image_png, model })
+}
+
+fn cloud_operation(kind: photocraft_engine::ai_action_plan::CloudEditKind) -> &'static str {
+    use photocraft_engine::ai_action_plan::CloudEditKind;
+    match kind {
+        CloudEditKind::ReplaceBackground => "replace-background",
+        CloudEditKind::Relight => "relight",
+        CloudEditKind::Restyle => "restyle",
+        CloudEditKind::GenerativeFill => "generative-fill",
+    }
+}
+
+async fn authorize_cloud_ai(operation: &str) -> Result<String, String> {
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_futures::JsFuture;
+
+    let body = serde_json::to_string(&serde_json::json!({ "operation": operation })).map_err(|error| error.to_string())?;
+    let init = web_sys::RequestInit::new();
+    init.set_method("POST");
+    init.set_body(&JsValue::from_str(&body));
+    init.set_credentials(web_sys::RequestCredentials::Include);
+    let request = web_sys::Request::new_with_str_and_init("/api/v1/pixelle/cloud/authorize", &init)
+        .map_err(|error| format!("Could not prepare Pixelle access check: {error:?}"))?;
+    request.headers().set("content-type", "application/json").map_err(|error| format!("Could not prepare Pixelle access headers: {error:?}"))?;
+    let window = web_sys::window().ok_or_else(|| "No browser window is available".to_string())?;
+    let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|error| format!("Pixelle access check failed: {error:?}"))?
+        .dyn_into()
+        .map_err(|_| "Pixelle access check returned an invalid response".to_string())?;
+    let value = JsFuture::from(response.json().map_err(|error| format!("Could not read Pixelle access response: {error:?}"))?)
+        .await
+        .map_err(|error| format!("Could not read Pixelle access response: {error:?}"))?;
+    let value: serde_json::Value = serde_wasm_bindgen::from_value(value).map_err(|error| error.to_string())?;
+    if !response.ok() {
+        if matches!(response.status(), 401 | 403) {
+            open_commerce_paywall();
+        }
+        return Err(match response.status() {
+            401 => "Sign in to use cloud AI".to_string(),
+            403 => value.get("message").and_then(serde_json::Value::as_str).unwrap_or("Pixelle cloud allowance is unavailable").to_string(),
+            _ => "Pixelle access service is temporarily unavailable".to_string(),
+        });
+    }
+    value
+        .get("authorizationId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| "Pixelle access response did not contain an authorization".to_string())
+}
+
+/// The commerce shell is ordinary same-origin browser chrome around the Rust
+/// editor. Keeping this call typed and one-way prevents payment UI state from
+/// becoming part of the canonical document/session state.
+fn open_commerce_paywall() {
+    let Some(window) = web_sys::window() else { return };
+    let Ok(commerce) = js_sys::Reflect::get(&window, &wasm_bindgen::JsValue::from_str("PixelleCommerce")) else { return };
+    let Ok(show) = js_sys::Reflect::get(&commerce, &wasm_bindgen::JsValue::from_str("showPaywall")) else { return };
+    if let Ok(function) = show.dyn_into::<js_sys::Function>() {
+        let _ = function.call0(&commerce);
+    }
+}
+
+async fn meter_local_project(bytes: &[u8]) -> Result<(), String> {
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_futures::JsFuture;
+
+    let project_key = format!("{:x}", Sha256::digest(bytes));
+    let body = serde_json::to_string(&serde_json::json!({ "projectKey": project_key })).map_err(|error| error.to_string())?;
+    let init = web_sys::RequestInit::new();
+    init.set_method("POST");
+    init.set_body(&JsValue::from_str(&body));
+    init.set_credentials(web_sys::RequestCredentials::Include);
+    let request = web_sys::Request::new_with_str_and_init("/api/v1/pixelle/usage/project", &init)
+        .map_err(|error| format!("Could not prepare Pixelle project check: {error:?}"))?;
+    request.headers().set("content-type", "application/json").map_err(|error| format!("Could not prepare Pixelle project headers: {error:?}"))?;
+    let window = web_sys::window().ok_or_else(|| "No browser window is available".to_string())?;
+    let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|error| format!("Pixelle project check failed: {error:?}"))?
+        .dyn_into()
+        .map_err(|_| "Pixelle project check returned an invalid response".to_string())?;
+    if response.ok() {
+        return Ok(());
+    }
+    if matches!(response.status(), 401 | 403) {
+        open_commerce_paywall();
+    }
+    Err(match response.status() {
+        401 => "Sign in and activate Pixelle Pro to open an image project".to_string(),
+        403 => "Pixelle project allowance is unavailable".to_string(),
+        _ => "Pixelle project allowance service is temporarily unavailable".to_string(),
+    })
 }
 
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
@@ -501,10 +601,13 @@ impl eframe::App for WebShell {
             wasm_bindgen_futures::spawn_local(async move {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped".into());
                 match f.bytes_async().await {
-                    Ok(bytes) => {
-                        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
-                        ctx.request_repaint();
-                    }
+                    Ok(bytes) => match meter_local_project(&bytes).await {
+                        Ok(()) => {
+                            inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
+                            ctx.request_repaint();
+                        }
+                        Err(error) => log::warn!("couldn't authorize dropped project {name}: {error}"),
+                    },
                     Err(e) => log::error!("couldn't read dropped file {name}: {e}"),
                 }
             });
@@ -558,7 +661,16 @@ fn services(
             FileDialogRequest::Open { .. } => wasm_bindgen_futures::spawn_local(async move {
                 let picked = rfd::AsyncFileDialog::new().add_filter("All Formats", OPEN_EXTS).pick_file().await;
                 let answer = match picked {
-                    Some(file) => Some(FileDialogAnswer::Contents(file.file_name(), file.read().await)),
+                    Some(file) => {
+                        let bytes = file.read().await;
+                        match meter_local_project(&bytes).await {
+                            Ok(()) => Some(FileDialogAnswer::Contents(file.file_name(), bytes)),
+                            Err(error) => {
+                                log::warn!("couldn't authorize opened project: {error}");
+                                None
+                            }
+                        }
+                    }
                     None => None,
                 };
                 reply.send(answer);
