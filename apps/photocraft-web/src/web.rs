@@ -437,8 +437,10 @@ async fn authorize_cloud_ai(operation: &str) -> Result<String, String> {
         .map_err(|error| format!("Could not read Pixelle access response: {error:?}"))?;
     let value: serde_json::Value = serde_wasm_bindgen::from_value(value).map_err(|error| error.to_string())?;
     if !response.ok() {
-        if matches!(response.status(), 401 | 403) {
-            open_commerce_paywall();
+        match response.status() {
+            401 => open_commerce_auth_then_paywall(),
+            403 => open_commerce_paywall(),
+            _ => {}
         }
         return Err(match response.status() {
             401 => "Sign in to use cloud AI".to_string(),
@@ -457,11 +459,26 @@ async fn authorize_cloud_ai(operation: &str) -> Result<String, String> {
 /// editor. Keeping this call typed and one-way prevents payment UI state from
 /// becoming part of the canonical document/session state.
 fn open_commerce_paywall() {
+    open_commerce_method("showPaywall", None);
+}
+
+/// An unauthenticated edit must enter the Pixelle identity flow before the
+/// subscription offer is shown. The commerce shell remembers this boolean and
+/// opens the paywall only after the same-origin exchange succeeds.
+fn open_commerce_auth_then_paywall() {
+    open_commerce_method("showAuth", Some(true));
+}
+
+fn open_commerce_method(method: &str, argument: Option<bool>) {
     let Some(window) = web_sys::window() else { return };
     let Ok(commerce) = js_sys::Reflect::get(&window, &wasm_bindgen::JsValue::from_str("PixelleCommerce")) else { return };
-    let Ok(show) = js_sys::Reflect::get(&commerce, &wasm_bindgen::JsValue::from_str("showPaywall")) else { return };
+    let Ok(show) = js_sys::Reflect::get(&commerce, &wasm_bindgen::JsValue::from_str(method)) else { return };
     if let Ok(function) = show.dyn_into::<js_sys::Function>() {
-        let _ = function.call0(&commerce);
+        if let Some(argument) = argument {
+            let _ = function.call1(&commerce, &wasm_bindgen::JsValue::from_bool(argument));
+        } else {
+            let _ = function.call0(&commerce);
+        }
     }
 }
 
@@ -506,8 +523,10 @@ async fn meter_local_project(bytes: &[u8]) -> Result<(), ProjectAllowanceError> 
         return Ok(());
     }
     let error = project_allowance_error(response.status());
-    if matches!(error, ProjectAllowanceError::Denied(_)) {
-        open_commerce_paywall();
+    match response.status() {
+        401 => open_commerce_auth_then_paywall(),
+        403 => open_commerce_paywall(),
+        _ => {}
     }
     Err(error)
 }

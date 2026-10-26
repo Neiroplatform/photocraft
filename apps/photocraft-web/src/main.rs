@@ -92,9 +92,13 @@ mod tests {
     #[test]
     fn paywall_authenticates_through_the_pixelle_identity_service() {
         let commerce = include_str!("../commerce.js");
+        let web = include_str!("web.rs");
         assert!(commerce.contains("https://auth.neiro-platform.ru"));
         assert!(commerce.contains("/auth/exchange"));
         assert!(commerce.contains("if (error.status === 401) { showAuth(true); return; }"));
+        assert!(web.contains("401 => open_commerce_auth_then_paywall()"));
+        assert!(web.contains("open_commerce_method(\"showAuth\", Some(true))"));
+        assert!(web.contains("403 => open_commerce_paywall()"));
     }
 
     #[test]
