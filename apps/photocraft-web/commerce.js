@@ -180,18 +180,18 @@
       <header class="paywall-header">
         <button class="paywall-close" type="button" aria-label="Закрыть">×</button>
         <h2 id="pixelle-paywall-title">Получите Pixelle Pro за 9 ₽</h2>
-        <div class="paywall-price-row"><span class="paywall-old-price">1 617 ₽</span><span class="paywall-discount">Первые 3 дня</span></div>
+        <div class="paywall-price-row"><span class="paywall-old-price">1 615 ₽</span><span class="paywall-discount">Первые 3 дня</span></div>
       </header>
       <div class="paywall-body">
         <ul class="paywall-benefits">
           <li>10 локальных проектов в пробном периоде</li>
           <li>100 проектов с локальной обработкой после продления</li>
-          <li>До 300 ₽ по фактическому расходу токенов на облачные генерации</li>
+          <li>До 600 ₽ по фактическому расходу токенов на облачные генерации</li>
           <li>Редактор, объектное выделение и локальные инструменты без отправки пикселей</li>
         </ul>
         <div class="paywall-consent">
-          <label><input id="pixelle-recurring" type="checkbox"><span>Согласен(-на) на 9 ₽ за 3 пробных дня, затем 1 617 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.</span></label>
-          <label><input id="pixelle-terms" type="checkbox"><span>Принимаю <a href="pixelle-offer.html" target="_blank" rel="noreferrer">оферту</a>, <a href="pixelle-rules.html" target="_blank" rel="noreferrer">правила сервиса</a> и <a href="pixelle-privacy.html" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</span></label>
+          <label><input id="pixelle-recurring" type="checkbox"><span>Согласен(-на) на 9 ₽ за 3 пробных дня, затем 1 615 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.</span></label>
+          <label><input id="pixelle-terms" type="checkbox"><span>Принимаю <a href="/offer" target="_blank" rel="noreferrer">оферту</a>, <a href="/rules" target="_blank" rel="noreferrer">правила сервиса</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</span></label>
         </div>
       </div>
       <div class="paywall-actions">
@@ -213,8 +213,8 @@
       const price = card.querySelector(".paywall-price-row");
       const recurringText = card.querySelector("#pixelle-recurring")?.nextElementSibling;
       if (title) title.textContent = "Возобновите Pixelle Pro";
-      if (price) price.innerHTML = "<strong>1 617 ₽</strong><span>на 5 дней</span>";
-      if (recurringText) recurringText.textContent = "Согласен(-на) на списание 1 617 ₽ за 5 дней, затем 1 617 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.";
+      if (price) price.innerHTML = "<strong>1 615 ₽</strong><span>на 5 дней</span>";
+      if (recurringText) recurringText.textContent = "Согласен(-на) на списание 1 615 ₽ за 5 дней, затем 1 615 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.";
     }).catch((error) => { if (error.status === 401) showAuth(true); });
   }
 
