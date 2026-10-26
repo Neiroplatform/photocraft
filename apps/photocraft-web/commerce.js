@@ -96,7 +96,7 @@
   });
 
   function frameError(message) {
-    const host = activeLayer?.querySelector(".px-commerce-card, .px-commerce-auth");
+    const host = activeLayer?.querySelector(".paywall-modal, .px-commerce-card, .px-commerce-auth");
     if (!host) return;
     let item = host.querySelector(".px-commerce-error");
     if (!item) { item = document.createElement("p"); item.className = "px-commerce-error"; host.append(item); }
@@ -170,33 +170,36 @@
 
   function showPaywall() {
     const card = document.createElement("section");
-    card.className = "px-commerce-card";
+    card.className = "paywall-modal ym-hide-content";
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-modal", "true");
     card.setAttribute("aria-labelledby", "pixelle-paywall-title");
     card.innerHTML = `
-      <div class="px-commerce-stripe"></div>
-      <div class="px-commerce-head"><h2 id="pixelle-paywall-title">Pixelle Pro — первые 3 дня за 9 ₽</h2><p>Редактируйте локально и подключайте облачный ИИ только когда он действительно нужен.</p></div>
-      <div class="px-commerce-body">
-        <div class="px-commerce-price"><strong>1 617 ₽</strong><span>каждые 5 дней после пробного периода</span></div>
-        <ul class="px-commerce-benefits">
-          <li>Пробный период: 10 локальных проектов; облачные генерации откроются после первого полного продления</li>
-          <li>100 проектов с локальной обработкой на каждый оплаченный период</li>
+      <header class="paywall-header">
+        <button class="paywall-close" type="button" aria-label="Закрыть">×</button>
+        <h2 id="pixelle-paywall-title">Получите Pixelle Pro за 9 ₽</h2>
+        <div class="paywall-price-row"><span class="paywall-old-price">1 617 ₽</span><span class="paywall-discount">Первые 3 дня</span></div>
+      </header>
+      <div class="paywall-body">
+        <ul class="paywall-benefits">
+          <li>10 локальных проектов в пробном периоде</li>
+          <li>100 проектов с локальной обработкой после продления</li>
           <li>До 300 ₽ фактических расходов на облачные генерации</li>
-          <li>Редактор, объектное выделение и локальные инструменты без внешней отправки пикселей</li>
-          <li>Чеки и управление подпиской доступны в профиле и поддержке</li>
+          <li>Редактор, объектное выделение и локальные инструменты без отправки пикселей</li>
         </ul>
-        <div class="px-commerce-consent">
+        <div class="paywall-consent">
           <label><input id="pixelle-recurring" type="checkbox"><span>Согласен(-на) на 9 ₽ за 3 пробных дня, затем 1 617 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.</span></label>
           <label><input id="pixelle-terms" type="checkbox"><span>Принимаю <a href="pixelle-offer.html" target="_blank" rel="noreferrer">оферту</a>, <a href="pixelle-rules.html" target="_blank" rel="noreferrer">правила сервиса</a> и <a href="pixelle-privacy.html" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</span></label>
         </div>
-        <button class="px-commerce-primary" type="button" disabled>Оплатить картой</button>
-        <p class="px-commerce-note">Лимит облачного ИИ считается по фактическому расходу токенов; перед запуском Pixelle резервирует не больше указанной для операции максимальной суммы. Сверх 300 ₽ списаний за генерацию нет. Будущие платежи можно отменить в профиле Pixelle Pro; доступ сохранится до конца оплаченного периода.</p>
+      </div>
+      <div class="paywall-actions">
+        <button class="paywall-payment paywall-payment-card" type="button" disabled><span class="paywall-card-icon" aria-hidden="true"></span>Оплата картой</button>
+        <p class="paywall-note">Будущие платежи можно отменить в профиле Pixelle Pro; доступ сохранится до конца оплаченного периода.</p>
       </div>`;
-    card.append(closeButton());
+    card.querySelector(".paywall-close").addEventListener("click", closeLayer);
     const consent = card.querySelector("#pixelle-terms");
     const recurring = card.querySelector("#pixelle-recurring");
-    const pay = card.querySelector(".px-commerce-primary");
+    const pay = card.querySelector(".paywall-payment-card");
     const sync = () => { pay.disabled = !(consent.checked && recurring.checked); };
     consent.addEventListener("change", sync);
     recurring.addEventListener("change", sync);
@@ -205,7 +208,7 @@
     request("/subscription/status").then((status) => {
       if (status.trialAvailable !== false) return;
       const title = card.querySelector("#pixelle-paywall-title");
-      const price = card.querySelector(".px-commerce-price");
+      const price = card.querySelector(".paywall-price-row");
       const recurringText = card.querySelector("#pixelle-recurring")?.nextElementSibling;
       if (title) title.textContent = "Возобновите Pixelle Pro";
       if (price) price.innerHTML = "<strong>1 617 ₽</strong><span>на 5 дней</span>";

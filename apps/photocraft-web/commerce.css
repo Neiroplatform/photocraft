@@ -33,6 +33,38 @@
 .px-commerce-primary:disabled { cursor: not-allowed; opacity: .42; }
 .px-commerce-note { margin: 14px 0 0; color: var(--px-muted); font-size: 12px; }
 .px-commerce-error { margin: 14px 0 0; padding: 11px 12px; border-radius: 10px; background: rgba(231,76,60,.14); color: #ffc0ba; }
+.px-commerce-backdrop .paywall-modal {
+  display: flex; width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0;
+  flex-direction: column; overflow: hidden; color: #24262d; background: white; border: 0; border-radius: 20px;
+  box-shadow: 0 22px 56px rgba(0, 0, 0, .22);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+.paywall-header { position: relative; min-height: 126px; padding: 22px 56px 20px 24px; flex: 0 0 auto; color: #172006; background: linear-gradient(100deg, #9bd70c 0%, #c8ff3f 54%, #83bd00 100%); }
+.paywall-modal .paywall-header h2 { max-width: 440px; margin: 0; color: #172006; font-size: 25px; font-weight: 700; line-height: 31px; letter-spacing: 0; }
+.paywall-close { position: absolute; top: 14px; right: 14px; display: grid; width: 36px; height: 36px; padding: 0; place-items: center; color: rgba(23, 32, 6, .72); background: transparent; border: 0; border-radius: 50%; font: 400 28px/1 Arial, sans-serif; cursor: pointer; }
+.paywall-close:hover, .paywall-close:focus-visible { color: #172006; background: rgba(255, 255, 255, .28); outline: none; }
+.paywall-price-row { display: flex; margin-top: 12px; align-items: center; gap: 10px; }
+.paywall-price-row strong { font-size: 20px; }
+.paywall-price-row > span:not(.paywall-old-price, .paywall-discount) { font-size: 14px; }
+.paywall-old-price { color: rgba(23, 32, 6, .58); font-size: 14px; text-decoration: line-through; }
+.paywall-discount { padding: 4px 10px; color: #111; background: white; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.paywall-body { display: flex; min-height: 0; padding: 22px 24px 16px; flex: 1 1 auto; flex-direction: column; gap: 18px; overflow-y: auto; }
+.paywall-benefits { display: grid; margin: 0; padding: 0; gap: 4px; list-style: none; }
+.paywall-benefits li { position: relative; min-height: 24px; padding-left: 28px; color: #4a4a4a; font-size: 14px; line-height: 24px; }
+.paywall-benefits li::before { position: absolute; left: 0; content: "✓"; color: #83bd00; font-size: 16px; font-weight: 600; }
+.paywall-consent { display: grid; gap: 12px; }
+.paywall-modal .paywall-consent label { display: grid; margin: 0; align-items: start; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; color: #94949e; font-size: 11px; line-height: 15px; cursor: pointer; }
+.paywall-modal .paywall-consent input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #83bd00; cursor: pointer; }
+.paywall-modal .paywall-consent a { color: #668f08; text-underline-offset: 2px; }
+.paywall-actions { display: grid; padding: 0 24px 16px; flex: 0 0 auto; gap: 10px; background: white; }
+.paywall-payment { display: flex; width: 100%; min-height: 52px; padding: 0 18px; align-items: center; justify-content: center; gap: 10px; color: #24262d; border-radius: 12px; font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; cursor: pointer; }
+.paywall-payment-card { background: #ffdd2d; border: 1px solid #ffdd2d; }
+.paywall-payment:disabled { opacity: .42; cursor: not-allowed; }
+.paywall-payment-card:not(:disabled):hover { background: #ffd51a; }
+.paywall-card-icon { position: relative; width: 24px; height: 18px; border: 2px solid currentColor; border-radius: 4px; }
+.paywall-card-icon::after { position: absolute; top: 4px; right: -2px; left: -2px; height: 2px; content: ""; background: currentColor; }
+.paywall-note { margin: 0; color: #94949e; font-size: 11px; line-height: 15px; }
+.paywall-modal > .px-commerce-error { margin: 0 24px 16px; color: #a61b15; }
 .px-commerce-auth { width: min(480px, calc(100vw - 32px)); height: min(720px, calc(100vh - 40px)); border: 1px solid var(--px-border); border-radius: 18px; overflow: hidden; background: white; position: relative; }
 .px-commerce-auth iframe { width: 100%; height: 100%; border: 0; }
 .px-commerce-auth .px-commerce-close { z-index: 2; }
@@ -44,5 +76,22 @@
 .px-support-form input, .px-support-form select, .px-support-form textarea { width: 100%; box-sizing: border-box; border: 1px solid #484d53; border-radius: 10px; background: #181a1d; color: white; padding: 11px 12px; font: inherit; }
 .px-support-form textarea { min-height: 140px; resize: vertical; }
 .px-support-success { padding: 18px; border-radius: 12px; background: rgba(185,242,39,.10); color: #e1ff9b; }
-@media (max-width: 620px) { .px-commerce-head, .px-commerce-body { padding-left: 20px; padding-right: 20px; } #pixelle-pro-button { right: 70px; } }
+@media (max-width: 620px) {
+  .px-commerce-head, .px-commerce-body { padding-left: 20px; padding-right: 20px; }
+  #pixelle-pro-button { right: 70px; }
+  .px-commerce-backdrop .paywall-modal { width: min(358px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 18px; }
+  .paywall-header { min-height: 136px; padding: 20px 52px 16px 20px; }
+  .paywall-modal .paywall-header h2 { max-width: 285px; font-size: 23px; line-height: 28px; }
+  .paywall-price-row { margin-top: 10px; }
+  .paywall-old-price { font-size: 12px; }
+  .paywall-discount { padding: 4px 8px; font-size: 11px; }
+  .paywall-body { padding: 20px 20px 16px; gap: 18px; }
+  .paywall-benefits { gap: 3px; }
+  .paywall-benefits li { min-height: 24px; padding-left: 24px; font-size: 13px; line-height: 24px; }
+  .paywall-benefits li::before { font-size: 15px; }
+  .paywall-modal .paywall-consent label { grid-template-columns: 20px minmax(0, 1fr); gap: 10px; font-size: 11px; line-height: 16px; }
+  .paywall-actions { padding: 10px 20px 14px; gap: 8px; }
+  .paywall-payment { min-height: 46px; font-size: 13px; }
+  .paywall-card-icon { width: 20px; height: 15px; }
+}
 @media (prefers-reduced-motion: reduce) { .px-commerce-layer * { scroll-behavior: auto !important; } }
