@@ -83,6 +83,19 @@ mod tests {
     }
 
     #[test]
+    fn checkout_errors_remain_inside_the_scrollable_paywall_body() {
+        let commerce = include_str!("../commerce.js");
+        let styles = include_str!("../commerce.css");
+        assert!(commerce.contains("host.querySelector(\".paywall-body\") || host"));
+        assert!(commerce.contains("errorHost.append(item)"));
+        assert!(commerce.contains("item.scrollIntoView({ block: \"nearest\" })"));
+        assert!(styles.contains(".paywall-body {"));
+        assert!(styles.contains("overflow-y: auto"));
+        assert!(styles.contains(".paywall-modal .px-commerce-error"));
+        assert!(!styles.contains(".paywall-modal > .px-commerce-error"));
+    }
+
+    #[test]
     fn firefox_uses_the_stable_webgl_backend_unless_webgpu_is_explicit() {
         let firefox = "Mozilla/5.0 Gecko/20100101 Firefox/145.0";
         assert!(use_webgl("", firefox));
