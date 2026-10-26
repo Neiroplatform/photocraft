@@ -88,7 +88,7 @@ mod tests {
         let styles = include_str!("../commerce.css");
         assert!(commerce.contains("host.querySelector(\".paywall-body\") || host"));
         assert!(commerce.contains("errorHost.append(item)"));
-        assert!(commerce.contains("item.scrollIntoView({ block: \"nearest\" })"));
+        assert!(commerce.contains("if (!host.matches(\".px-commerce-auth\")) item.scrollIntoView({ block: \"nearest\" })"));
         assert!(styles.contains(".paywall-body {"));
         assert!(styles.contains("overflow-y: auto"));
         assert!(styles.contains(".paywall-modal .px-commerce-error"));

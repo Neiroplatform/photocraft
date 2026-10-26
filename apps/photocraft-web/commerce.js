@@ -102,7 +102,7 @@
     let item = host.querySelector(".px-commerce-error");
     if (!item) { item = document.createElement("p"); item.className = "px-commerce-error"; errorHost.append(item); }
     item.textContent = message;
-    item.scrollIntoView({ block: "nearest" });
+    if (!host.matches(".px-commerce-auth")) item.scrollIntoView({ block: "nearest" });
   }
 
   async function loadWidget() {
