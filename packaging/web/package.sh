@@ -11,29 +11,6 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 HERE="$ROOT/packaging/web"
 
-if [ "${1:-}" != "--skip-build" ]; then
-  command -v trunk >/dev/null || { echo "error: trunk not found (cargo install trunk --locked)" >&2; exit 1; }
-  (cd "$ROOT/apps/photocraft-web" && trunk build --release)
-fi
-
-SITE="$ROOT/dist/web"
-[ -f "$SITE/index.html" ] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
-
-# Keep the complete editor's public path explicit alongside the task pages.
-cp "$SITE/index.html" "$SITE/patchy.html"
-
-# Every Quick Tool has a stable standalone URL but loads the same exact WASM
-# runtime. The runtime chooses its closed task route from the packaged file name.
-QUICK_TOOL_PAGES=(
-  quick-tools
-  remove-background blur-background extract-object remove-object
-  auto-enhance denoise sharpen resize-image expand-canvas
-  replace-background relight restyle generative-fill
-)
-for page in "${QUICK_TOOL_PAGES[@]}"; do
-  cp "$SITE/index.html" "$SITE/$page.html"
-done
-
 # MobileSAM is a runtime asset, not embedded in the UI wasm. Pin and verify the
 # exact candidate, then shard it below common 25 MiB CDN per-file limits.
 MODEL_REV="8b4cb7c743f3b3cb8afd212a86ae15b1bbfdac97"
@@ -63,10 +40,43 @@ else
 fi
 [ "$actual_official_sha" = "$OFFICIAL_SHA" ] \
   || { echo "error: official MobileSAM SHA-256 $actual_official_sha does not match $OFFICIAL_SHA" >&2; exit 1; }
+# The provenance check is native-only and compiles a large inference stack. It
+# must not share the browser target directory: keeping both graphs caused the
+# browser-only release runner to exhaust its disk after a successful WASM build.
+PROVENANCE_TARGET="$CARGO_TARGET_DIR/web-provenance-target"
+rm -rf "$PROVENANCE_TARGET"
+trap 'rm -rf "$PROVENANCE_TARGET"' EXIT
 # The mirror has no independent model card. Prove that every tensor in the
 # browser conversion exactly matches the pinned Apache-2.0 official checkpoint.
 PHOTOCRAFT_OFFICIAL_MOBILE_SAM_PT="$OFFICIAL_CACHE" PHOTOCRAFT_MOBILE_SAM_WEIGHTS="$MODEL_CACHE" \
+  CARGO_TARGET_DIR="$PROVENANCE_TARGET" \
   cargo test -p photocraft-ml --features mobile-sam --test model_provenance -- --ignored
+rm -rf "$PROVENANCE_TARGET"
+trap - EXIT
+
+if [ "${1:-}" != "--skip-build" ]; then
+  command -v trunk >/dev/null || { echo "error: trunk not found (cargo install trunk --locked)" >&2; exit 1; }
+  (cd "$ROOT/apps/photocraft-web" && trunk build --release)
+fi
+
+SITE="$ROOT/dist/web"
+[ -f "$SITE/index.html" ] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
+
+# Keep the complete editor's public path explicit alongside the task pages.
+cp "$SITE/index.html" "$SITE/patchy.html"
+
+# Every Quick Tool has a stable standalone URL but loads the same exact WASM
+# runtime. The runtime chooses its closed task route from the packaged file name.
+QUICK_TOOL_PAGES=(
+  quick-tools
+  remove-background blur-background extract-object remove-object
+  auto-enhance denoise sharpen resize-image expand-canvas
+  replace-background relight restyle generative-fill
+)
+for page in "${QUICK_TOOL_PAGES[@]}"; do
+  cp "$SITE/index.html" "$SITE/$page.html"
+done
+
 # The committed source SBOM is deterministic and must match the exact lockfile,
 # wasm target/features and model identity used for this package.
 cargo xtask sbom --check
