@@ -113,12 +113,15 @@ mod tests {
     }
 
     #[test]
-    fn project_quota_is_applied_only_after_import_validation_and_skips_presets() {
+    fn project_quota_is_applied_after_import_validation_without_making_local_editing_depend_on_billing_uptime() {
         let web = include_str!("web.rs");
         assert!(web.contains("photocraft_io::import(name, bytes)"));
         assert!(web.contains("meter_local_project(bytes).await"));
         assert!(web.contains("PRESET_LIBRARY_EXTS"));
         assert!(web.contains("authorize_opened_project(&name, &bytes).await"));
+        assert!(web.contains("Err(ProjectAllowanceError::Denied(message)) => Err(message)"));
+        assert!(web.contains("ProjectAllowanceError::Unavailable(message)"));
+        assert!(web.contains("opening the local project without metering"));
         assert!(!web.contains("Ok(bytes) => meter_local_project(&bytes).await"));
     }
 }

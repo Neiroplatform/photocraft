@@ -465,36 +465,51 @@ fn open_commerce_paywall() {
     }
 }
 
-async fn meter_local_project(bytes: &[u8]) -> Result<(), String> {
+#[derive(Debug, PartialEq, Eq)]
+enum ProjectAllowanceError {
+    Denied(String),
+    Unavailable(String),
+}
+
+fn project_allowance_error(status: u16) -> ProjectAllowanceError {
+    match status {
+        401 => ProjectAllowanceError::Denied("Sign in and activate Pixelle Pro to open an image project".to_string()),
+        403 => ProjectAllowanceError::Denied("Pixelle project allowance is unavailable".to_string()),
+        _ => ProjectAllowanceError::Unavailable(format!("Pixelle project allowance service returned HTTP {status}")),
+    }
+}
+
+async fn meter_local_project(bytes: &[u8]) -> Result<(), ProjectAllowanceError> {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
     let project_key = format!("{:x}", Sha256::digest(bytes));
-    let body = serde_json::to_string(&serde_json::json!({ "projectKey": project_key })).map_err(|error| error.to_string())?;
+    let body =
+        serde_json::to_string(&serde_json::json!({ "projectKey": project_key })).map_err(|error| ProjectAllowanceError::Unavailable(error.to_string()))?;
     let init = web_sys::RequestInit::new();
     init.set_method("POST");
     init.set_body(&JsValue::from_str(&body));
     init.set_credentials(web_sys::RequestCredentials::Include);
     let request = web_sys::Request::new_with_str_and_init("/api/v1/pixelle/usage/project", &init)
-        .map_err(|error| format!("Could not prepare Pixelle project check: {error:?}"))?;
-    request.headers().set("content-type", "application/json").map_err(|error| format!("Could not prepare Pixelle project headers: {error:?}"))?;
-    let window = web_sys::window().ok_or_else(|| "No browser window is available".to_string())?;
+        .map_err(|error| ProjectAllowanceError::Unavailable(format!("Could not prepare Pixelle project check: {error:?}")))?;
+    request
+        .headers()
+        .set("content-type", "application/json")
+        .map_err(|error| ProjectAllowanceError::Unavailable(format!("Could not prepare Pixelle project headers: {error:?}")))?;
+    let window = web_sys::window().ok_or_else(|| ProjectAllowanceError::Unavailable("No browser window is available".to_string()))?;
     let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
         .await
-        .map_err(|error| format!("Pixelle project check failed: {error:?}"))?
+        .map_err(|error| ProjectAllowanceError::Unavailable(format!("Pixelle project check failed: {error:?}")))?
         .dyn_into()
-        .map_err(|_| "Pixelle project check returned an invalid response".to_string())?;
+        .map_err(|_| ProjectAllowanceError::Unavailable("Pixelle project check returned an invalid response".to_string()))?;
     if response.ok() {
         return Ok(());
     }
-    if matches!(response.status(), 401 | 403) {
+    let error = project_allowance_error(response.status());
+    if matches!(error, ProjectAllowanceError::Denied(_)) {
         open_commerce_paywall();
     }
-    Err(match response.status() {
-        401 => "Sign in and activate Pixelle Pro to open an image project".to_string(),
-        403 => "Pixelle project allowance is unavailable".to_string(),
-        _ => "Pixelle project allowance service is temporarily unavailable".to_string(),
-    })
+    Err(error)
 }
 
 fn is_preset_library(name: &str) -> bool {
@@ -510,7 +525,16 @@ async fn authorize_opened_project(name: &str, bytes: &[u8]) -> Result<(), String
         return Ok(());
     }
     photocraft_io::import(name, bytes).map_err(|error| format!("Could not open {name}: {error}"))?;
-    meter_local_project(bytes).await
+    match meter_local_project(bytes).await {
+        Ok(()) => Ok(()),
+        Err(ProjectAllowanceError::Denied(message)) => Err(message),
+        Err(ProjectAllowanceError::Unavailable(message)) => {
+            // Local editing must remain available during a billing/control-plane outage. Cloud AI
+            // remains fail-closed at its own authorization boundary before any pixels leave the browser.
+            log::warn!("{message}; opening the local project without metering");
+            Ok(())
+        }
+    }
 }
 
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
@@ -844,7 +868,7 @@ fn screen_color_service() -> Option<photocraft_ui_egui::screen_picker::Service> 
 
 #[cfg(test)]
 mod tests {
-    use super::is_preset_library;
+    use super::{ProjectAllowanceError, is_preset_library, project_allowance_error};
 
     #[test]
     fn preset_libraries_do_not_consume_image_project_slots() {
@@ -853,6 +877,15 @@ mod tests {
         }
         for name in ["photo.png", "design.psd", "document.pcraft", "vector.svg"] {
             assert!(!is_preset_library(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn only_explicit_auth_and_allowance_denials_block_local_projects() {
+        assert!(matches!(project_allowance_error(401), ProjectAllowanceError::Denied(_)));
+        assert!(matches!(project_allowance_error(403), ProjectAllowanceError::Denied(_)));
+        for status in [0, 404, 429, 500, 502, 503] {
+            assert!(matches!(project_allowance_error(status), ProjectAllowanceError::Unavailable(_)), "HTTP {status}");
         }
     }
 }
