@@ -51,11 +51,11 @@
 .paywall-body { display: flex; min-height: 0; padding: 22px 24px 16px; flex: 1 1 auto; flex-direction: column; gap: 18px; overflow-y: auto; }
 .paywall-benefits { display: grid; margin: 0; padding: 0; gap: 4px; list-style: none; }
 .paywall-benefits li { position: relative; min-height: 24px; padding-left: 28px; color: #4a4a4a; font-size: 14px; line-height: 24px; }
-.paywall-benefits li::before { position: absolute; left: 0; content: "✓"; color: #83bd00; font-size: 16px; font-weight: 600; }
+.paywall-benefits li::before { position: absolute; left: 0; content: "✓"; color: #6366f2; font-size: 16px; font-weight: 600; }
 .paywall-consent { display: grid; gap: 12px; }
 .paywall-modal .paywall-consent label { display: grid; margin: 0; align-items: start; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; color: #94949e; font-size: 11px; line-height: 15px; cursor: pointer; }
-.paywall-modal .paywall-consent input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #83bd00; cursor: pointer; }
-.paywall-modal .paywall-consent a { color: #668f08; text-underline-offset: 2px; }
+.paywall-modal .paywall-consent input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #6366f2; cursor: pointer; }
+.paywall-modal .paywall-consent a { color: #6366f2; text-underline-offset: 2px; }
 .paywall-actions { display: grid; padding: 0 24px 16px; flex: 0 0 auto; gap: 10px; background: white; }
 .paywall-payment { display: flex; width: 100%; min-height: 52px; padding: 0 18px; align-items: center; justify-content: center; gap: 10px; color: #24262d; border-radius: 12px; font: 600 15px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; cursor: pointer; }
 .paywall-payment-card { background: #ffdd2d; border: 1px solid #ffdd2d; }
