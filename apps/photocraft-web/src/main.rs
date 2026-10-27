@@ -76,6 +76,9 @@ mod tests {
     fn checkout_tokenizes_the_card_and_discloses_cancellation() {
         let commerce = include_str!("../commerce.js");
         assert!(commerce.contains("tokenize: true"));
+        assert!(commerce.contains("securitypolicyviolation"));
+        assert!(commerce.contains("https://widget.cloudpayments.ru/"));
+        assert!(commerce.contains("Платёжная форма заблокирована настройками безопасности страницы"));
         assert!(commerce.contains("1 615 ₽"));
         assert!(!commerce.contains("До 600 ₽"));
         assert!(commerce.contains("10 локальных проектов в пробном периоде"));

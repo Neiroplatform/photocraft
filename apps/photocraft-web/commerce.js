@@ -126,6 +126,28 @@
     });
   }
 
+  function startWidget(widget, parameters) {
+    return new Promise((resolve, reject) => {
+      const onPolicyViolation = (event) => {
+        if (!event.violatedDirective.startsWith("style-src") ||
+            !String(event.sourceFile || "").startsWith("https://widget.cloudpayments.ru/")) return;
+        cleanup();
+        reject(new Error("Платёжная форма заблокирована настройками безопасности страницы"));
+      };
+      const cleanup = () => document.removeEventListener("securitypolicyviolation", onPolicyViolation);
+      document.addEventListener("securitypolicyviolation", onPolicyViolation);
+      try {
+        Promise.resolve(widget.start(parameters)).then(
+          (result) => { cleanup(); resolve(result); },
+          (error) => { cleanup(); reject(error); },
+        );
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
+  }
+
   async function checkout(button, consent, recurring) {
     if (!consent.checked || !recurring.checked) return;
     button.disabled = true;
@@ -137,7 +159,7 @@
       });
       await loadWidget();
       const widget = new window.cp.CloudPayments();
-      const result = await widget.start({
+      const result = await startWidget(widget, {
         publicTerminalId: order.publicId,
         description: order.description,
         paymentSchema: "Single",
