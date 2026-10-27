@@ -1,0 +1,23 @@
+[
+  {
+    "kind": "offer",
+    "id": "offer-2026-10-27-a03249ff9231",
+    "sourceSha256": "a03249ff92310b645d0f8cb3a5900763bf9ddd52e561fd1878e9d40303321355",
+    "archive": "legal/archive/before-2026-10-27/offer.html",
+    "versionedUrl": "legal/2026-10-27/offer.html"
+  },
+  {
+    "kind": "privacy",
+    "id": "privacy-2026-10-27-76a441e66ebf",
+    "sourceSha256": "76a441e66ebfef14d527e9bf2f16e72a70fa0ff81b574732c3f335c5689f232c",
+    "archive": "legal/archive/before-2026-10-27/privacy.html",
+    "versionedUrl": "legal/2026-10-27/privacy.html"
+  },
+  {
+    "kind": "rules",
+    "id": "rules-2026-10-27-1acd05bab703",
+    "sourceSha256": "1acd05bab703cc443d3e252a0cbe0f95ae7d8f477502416e099c64cd676cc023",
+    "archive": "legal/archive/before-2026-10-27/rules.html",
+    "versionedUrl": "legal/2026-10-27/rules.html"
+  }
+]
