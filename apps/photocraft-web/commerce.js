@@ -119,14 +119,13 @@
       }
       const script = document.createElement("script");
       script.src = "https://widget.cloudpayments.ru/bundles/cloudpayments.js";
-      script.crossOrigin = "anonymous";
       script.onload = resolve;
       script.onerror = () => reject(new Error("Платёжная форма недоступна"));
       document.head.append(script);
     });
   }
 
-  function startWidget(widget, parameters) {
+  function payWithWidget(widget, parameters) {
     return new Promise((resolve, reject) => {
       const onPolicyViolation = (event) => {
         if (!event.violatedDirective.startsWith("style-src") ||
@@ -137,10 +136,11 @@
       const cleanup = () => document.removeEventListener("securitypolicyviolation", onPolicyViolation);
       document.addEventListener("securitypolicyviolation", onPolicyViolation);
       try {
-        Promise.resolve(widget.start(parameters)).then(
-          (result) => { cleanup(); resolve(result); },
-          (error) => { cleanup(); reject(error); },
-        );
+        widget.pay("charge", parameters, {
+          onSuccess: (options) => { cleanup(); resolve({ status: "success", options }); },
+          onFail: (_reason, options) => { cleanup(); resolve({ status: "fail", options }); },
+          onComplete: () => {},
+        });
       } catch (error) {
         cleanup();
         reject(error);
@@ -148,29 +148,54 @@
     });
   }
 
+  function cloudPaymentsReceipt(receipt) {
+    if (!receipt) return undefined;
+    return {
+      Items: (receipt.items || []).map((item) => ({
+        Label: item.label,
+        Price: item.price,
+        Quantity: item.quantity,
+        Amount: item.amount,
+        Vat: item.vat,
+        Method: item.method,
+        Object: item.object,
+        MeasurementUnit: item.measurementUnit,
+      })),
+      TaxationSystem: receipt.taxationSystem,
+      Email: receipt.email,
+      IsBso: receipt.isBso,
+      IsInternetPayment: receipt.isInternetPayment,
+      Amounts: receipt.amounts ? {
+        Electronic: receipt.amounts.electronic,
+        AdvancePayment: receipt.amounts.advancePayment,
+        Credit: receipt.amounts.credit,
+        Provision: receipt.amounts.provision,
+      } : undefined,
+    };
+  }
+
   async function checkout(button, consent, recurring) {
     if (!consent.checked || !recurring.checked) return;
     button.disabled = true;
     button.textContent = "Открываем оплату…";
     try {
-      const order = await request("/subscription/create", {
+      const [order] = await Promise.all([request("/subscription/create", {
         method: "POST",
         body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, acceptRecurring: true })
-      });
-      await loadWidget();
+      }), loadWidget()]);
       const widget = new window.cp.CloudPayments();
-      const result = await startWidget(widget, {
-        publicTerminalId: order.publicId,
+      const result = await payWithWidget(widget, {
+        publicId: order.publicId,
         description: order.description,
-        paymentSchema: "Single",
         currency: order.currency,
-        culture: "ru-RU",
         amount: order.amount,
-        externalId: order.orderId,
-        receiptEmail: order.email,
-        tokenize: true,
-        userInfo: { accountId: order.accountId, email: order.email },
-        receipt: order.receipt
+        invoiceId: order.orderId,
+        accountId: order.accountId,
+        email: order.email,
+        skin: "mini",
+        data: {
+          cloudPayments: { CustomerReceipt: cloudPaymentsReceipt(order.receipt) },
+        },
       });
       if (result?.status !== "success") throw new Error("Платёж не был подтверждён");
       for (let attempt = 0; attempt < 10; attempt += 1) {

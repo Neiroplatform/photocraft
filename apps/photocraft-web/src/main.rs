@@ -57,6 +57,9 @@ mod tests {
         let scripts: Vec<_> = html.match_indices("<script").collect();
         assert_eq!(scripts.len(), 1, "only the commerce shell may be hand-written; Trunk injects the editor loader");
         assert!(html.contains("<script src=\"commerce.js\" defer></script>"));
+        assert!(html.contains("rel=\"dns-prefetch\" href=\"https://widget.cloudpayments.ru\""));
+        assert!(html.contains("rel=\"preconnect\" href=\"https://widget.cloudpayments.ru\" crossorigin"));
+        assert!(html.contains("rel=\"preload\" href=\"https://widget.cloudpayments.ru/bundles/cloudpayments.js\" as=\"script\""));
     }
 
     #[test]
@@ -75,7 +78,13 @@ mod tests {
     #[test]
     fn checkout_tokenizes_the_card_and_discloses_cancellation() {
         let commerce = include_str!("../commerce.js");
-        assert!(commerce.contains("tokenize: true"));
+        assert!(commerce.contains("widget.pay(\"charge\""));
+        assert!(commerce.contains("publicId: order.publicId"));
+        assert!(commerce.contains("invoiceId: order.orderId"));
+        assert!(commerce.contains("cloudPayments: { CustomerReceipt: cloudPaymentsReceipt(order.receipt) }"));
+        assert!(!commerce.contains("recurrent: {"));
+        assert!(!commerce.contains("widget.start("));
+        assert!(!commerce.contains("script.crossOrigin"));
         assert!(commerce.contains("securitypolicyviolation"));
         assert!(commerce.contains("https://widget.cloudpayments.ru/"));
         assert!(commerce.contains("Платёжная форма заблокирована настройками безопасности страницы"));
