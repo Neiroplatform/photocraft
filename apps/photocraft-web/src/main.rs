@@ -77,14 +77,14 @@ mod tests {
         let commerce = include_str!("../commerce.js");
         assert!(commerce.contains("tokenize: true"));
         assert!(commerce.contains("1 615 ₽"));
-        assert!(commerce.contains("До 600 ₽"));
+        assert!(!commerce.contains("До 600 ₽"));
         assert!(commerce.contains("10 локальных проектов в пробном периоде"));
         assert!(commerce.contains("100 проектов с локальной обработкой после продления"));
         assert!(commerce.contains("href=\"/offer\""));
         assert!(commerce.contains("href=\"/rules\""));
         assert!(commerce.contains("href=\"/privacy\""));
         assert!(commerce.contains("Будущие платежи можно отменить"));
-        assert!(commerce.contains("фактическому расходу токенов"));
+        assert!(!commerce.contains("фактическому расходу токенов"));
         assert!(commerce.contains("status.cancelAtPeriodEnd"));
         assert!(commerce.contains("Будущие списания отменены"));
     }
