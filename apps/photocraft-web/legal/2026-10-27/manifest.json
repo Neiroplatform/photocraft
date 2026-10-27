@@ -4,20 +4,20 @@
     "id": "offer-2026-10-27-04984ffe6b42",
     "sourceSha256": "04984ffe6b426a8d2b0b57a94fbb74c9ab570cf0d7d8727dafa079706b006e4d",
     "archive": "legal/archive/before-2026-10-27/offer.html",
-    "versionedUrl": "/legal/2026-10-27/offer.html"
+    "versionedUrl": "legal/2026-10-27/offer.html"
   },
   {
     "kind": "privacy",
     "id": "privacy-2026-10-27-76a441e66ebf",
     "sourceSha256": "76a441e66ebfef14d527e9bf2f16e72a70fa0ff81b574732c3f335c5689f232c",
     "archive": "legal/archive/before-2026-10-27/privacy.html",
-    "versionedUrl": "/legal/2026-10-27/privacy.html"
+    "versionedUrl": "legal/2026-10-27/privacy.html"
   },
   {
     "kind": "rules",
     "id": "rules-2026-10-27-e5684884ec2d",
     "sourceSha256": "e5684884ec2dc7bc35141711ad9e00c8fd01d026939009928fe7494cc7f3d6cd",
     "archive": "legal/archive/before-2026-10-27/rules.html",
-    "versionedUrl": "/legal/2026-10-27/rules.html"
+    "versionedUrl": "legal/2026-10-27/rules.html"
   }
 ]
