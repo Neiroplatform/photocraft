@@ -1,8 +1,8 @@
 [
   {
     "kind": "offer",
-    "id": "offer-2026-10-27-a8aeebcea774",
-    "sourceSha256": "a8aeebcea7744e7a3481a6243ab76108cd40a6f9769849d71d872f6f26035613",
+    "id": "offer-2026-10-27-04984ffe6b42",
+    "sourceSha256": "04984ffe6b426a8d2b0b57a94fbb74c9ab570cf0d7d8727dafa079706b006e4d",
     "archive": "/legal/archive/before-2026-10-27/offer.html",
     "versionedUrl": "/legal/2026-10-27/offer.html"
   },
@@ -15,8 +15,8 @@
   },
   {
     "kind": "rules",
-    "id": "rules-2026-10-27-7221cb07fc6b",
-    "sourceSha256": "7221cb07fc6b298f005acb4cdcedaf70e94f52ab54e71df3642b70264bc96886",
+    "id": "rules-2026-10-27-e5684884ec2d",
+    "sourceSha256": "e5684884ec2dc7bc35141711ad9e00c8fd01d026939009928fe7494cc7f3d6cd",
     "archive": "/legal/archive/before-2026-10-27/rules.html",
     "versionedUrl": "/legal/2026-10-27/rules.html"
   }
