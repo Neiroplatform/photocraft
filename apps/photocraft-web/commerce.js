@@ -194,10 +194,13 @@
         method: "POST",
         body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, acceptRecurring: true })
       }), loadWidget()]);
-      // Pixelle renewals require a reusable card token. Disabling SBP keeps
-      // widget.pay on CloudPayments' proven card flow instead of the newer
-      // modular `next` flow, which cannot supply the required recurrent token.
+      // Pixelle renewals require a reusable card token, so the checkout only
+      // offers card payment even when CloudPayments changes its widget shell.
       const widget = new window.cp.CloudPayments({ sbpSupport: false });
+      // CloudPayments mounts its own fixed overlay below Pixelle's deliberately
+      // topmost modal layer. Remove the paywall before opening the provider UI;
+      // otherwise the working card form is rendered behind a blurred backdrop.
+      closeLayer();
       const result = await payWithWidget(widget, {
         publicId: order.publicId,
         description: order.description,
@@ -225,7 +228,13 @@
       }
     } catch (error) {
       if (error.status === 401) { showAuth(true); return; }
-      frameError(error.message || "Не удалось открыть оплату. Попробуйте позже.");
+      const message = error.message || "Не удалось открыть оплату. Попробуйте позже.";
+      if (!activeLayer) {
+        showPaywall();
+        frameError(message);
+        return;
+      }
+      frameError(message);
       button.disabled = false;
       button.textContent = "Оплатить картой";
     }
