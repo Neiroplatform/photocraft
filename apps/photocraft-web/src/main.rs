@@ -78,12 +78,18 @@ mod tests {
     #[test]
     fn checkout_tokenizes_the_card_and_discloses_cancellation() {
         let commerce = include_str!("../commerce.js");
-        assert!(commerce.contains("widget.pay(\"charge\""));
-        assert!(commerce.contains("publicId: order.publicId"));
-        assert!(commerce.contains("invoiceId: order.orderId"));
-        assert!(commerce.contains("cloudPayments: { CustomerReceipt: cloudPaymentsReceipt(order.receipt) }"));
+        assert!(commerce.contains("widget.start(parameters)"));
+        assert!(commerce.contains("publicTerminalId: order.publicId"));
+        assert!(commerce.contains("paymentSchema: \"Single\""));
+        assert!(commerce.contains("externalId: order.orderId"));
+        assert!(commerce.contains("tokenize: true"));
+        assert!(commerce.contains("accountId: order.accountId"));
+        assert!(commerce.contains("receipt: cloudPaymentsReceipt(order.receipt)"));
+        assert!(commerce.contains("restrictedPaymentMethods: ["));
+        assert!(commerce.contains("\"Sbp\""));
+        assert!(commerce.contains("\"TinkoffPay\""));
         assert!(!commerce.contains("recurrent: {"));
-        assert!(!commerce.contains("widget.start("));
+        assert!(!commerce.contains("widget.pay("));
         assert!(!commerce.contains("script.crossOrigin"));
         assert!(commerce.contains("securitypolicyviolation"));
         assert!(commerce.contains("https://widget.cloudpayments.ru/"));
