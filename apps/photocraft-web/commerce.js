@@ -127,6 +127,7 @@
 
   function payWithWidget(widget, parameters) {
     return new Promise((resolve, reject) => {
+      let settled = false;
       const onPolicyViolation = (event) => {
         if (!event.violatedDirective.startsWith("style-src") ||
             !String(event.sourceFile || "").startsWith("https://widget.cloudpayments.ru/")) return;
@@ -134,14 +135,24 @@
         reject(new Error("Платёжная форма заблокирована настройками безопасности страницы"));
       };
       const cleanup = () => document.removeEventListener("securitypolicyviolation", onPolicyViolation);
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
       document.addEventListener("securitypolicyviolation", onPolicyViolation);
       try {
         widget.pay("charge", parameters, {
-          onSuccess: (options) => { cleanup(); resolve({ status: "success", options }); },
-          onFail: (_reason, options) => { cleanup(); resolve({ status: "fail", options }); },
-          onComplete: () => {},
+          onSuccess: (options) => finish({ status: "success", options }),
+          onFail: (_reason, options) => finish({ status: "fail", options }),
+          onComplete: (paymentResult, options) => finish({
+            status: paymentResult?.success === true ? "success" : "cancel",
+            options,
+          }),
         });
       } catch (error) {
+        settled = true;
         cleanup();
         reject(error);
       }
@@ -183,7 +194,10 @@
         method: "POST",
         body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, acceptRecurring: true })
       }), loadWidget()]);
-      const widget = new window.cp.CloudPayments();
+      // Pixelle renewals require a reusable card token. Disabling SBP keeps
+      // widget.pay on CloudPayments' proven card flow instead of the newer
+      // modular `next` flow, which cannot supply the required recurrent token.
+      const widget = new window.cp.CloudPayments({ sbpSupport: false });
       const result = await payWithWidget(widget, {
         publicId: order.publicId,
         description: order.description,
