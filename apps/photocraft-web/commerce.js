@@ -125,7 +125,7 @@
     });
   }
 
-  function payWithWidget(widget, parameters) {
+  function startWidget(widget, parameters) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const onPolicyViolation = (event) => {
@@ -143,13 +143,11 @@
       };
       document.addEventListener("securitypolicyviolation", onPolicyViolation);
       try {
-        widget.pay("charge", parameters, {
-          onSuccess: (options) => finish({ status: "success", options }),
-          onFail: (_reason, options) => finish({ status: "fail", options }),
-          onComplete: (paymentResult, options) => finish({
-            status: paymentResult?.success === true ? "success" : "cancel",
-            options,
-          }),
+        Promise.resolve(widget.start(parameters)).then(finish, (error) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
         });
       } catch (error) {
         settled = true;
@@ -206,25 +204,41 @@
         method: "POST",
         body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, acceptRecurring: true })
       }), loadWidget()]);
-      // Pixelle renewals require a reusable card token, so the checkout only
-      // offers card payment even when CloudPayments changes its widget shell.
-      const widget = new window.cp.CloudPayments({ sbpSupport: false });
+      // Use CloudPayments' current intent contract. The legacy widget.pay API
+      // is internally bridged to /next/api/intent/pay and can fail before the
+      // card form is shown. Pixelle keeps renewals application-managed, so the
+      // initial Single payment explicitly tokenizes the card without creating
+      // a provider-managed recurrent subscription.
+      const widget = new window.cp.CloudPayments();
       // CloudPayments mounts its own fixed overlay below Pixelle's deliberately
       // topmost modal layer. Remove the paywall before opening the provider UI;
       // otherwise the working card form is rendered behind a blurred backdrop.
       closeLayer();
-      const result = await payWithWidget(widget, {
-        publicId: order.publicId,
+      const result = await startWidget(widget, {
+        publicTerminalId: order.publicId,
         description: order.description,
+        paymentSchema: "Single",
         currency: order.currency,
+        culture: "ru-RU",
         amount: order.amount,
-        invoiceId: order.orderId,
-        accountId: order.accountId,
-        email: order.email,
+        externalId: order.orderId,
+        receiptEmail: order.email,
         skin: "mini",
-        data: {
-          cloudPayments: { CustomerReceipt: cloudPaymentsReceipt(order.receipt) },
+        tokenize: true,
+        userInfo: {
+          accountId: order.accountId,
+          email: order.email,
         },
+        restrictedPaymentMethods: [
+          "Sbp",
+          "TcsInstallment",
+          "TinkoffPay",
+          "MirPay",
+          "Dolyame",
+          "ForeignCard",
+          "SberPay",
+        ],
+        receipt: cloudPaymentsReceipt(order.receipt),
       });
       if (result?.status !== "success") throw new Error("Платёж не был подтверждён");
       for (let attempt = 0; attempt < 10; attempt += 1) {
