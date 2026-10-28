@@ -37,6 +37,7 @@ type Clipboard = Arc<Mutex<BrowserClipboard>>;
 type ProjectAccess = Arc<Mutex<ProjectAccessState>>;
 
 const PROJECT_ACCESS_DELAY_MS: f64 = 5_000.0;
+const RECENT_IMPORT_WINDOW_MS: f64 = 60_000.0;
 
 #[derive(Default)]
 struct ProjectAccessState {
@@ -605,6 +606,21 @@ fn blank_project_key(document_id: u64) -> String {
     format!("{:x}", Sha256::digest(format!("pixelle:new:{document_id}").as_bytes()))
 }
 
+/// Match an admitted editor document to an import that was already metered from its source
+/// bytes. Some importers normalise the tab name (for example `screenshot.png` to `screenshot`),
+/// so an exact name match is preferred but a single recent admission is still consumed as the
+/// same project instead of scheduling a duplicate blank-project key.
+fn consume_recent_import(access: &mut ProjectAccessState, document_name: &str, now: f64) -> bool {
+    access.recent_imports.retain(|(_, registered)| now - *registered < RECENT_IMPORT_WINDOW_MS);
+    let index = access.recent_imports.iter().position(|(candidate, _)| candidate == document_name).or_else(|| (!access.recent_imports.is_empty()).then_some(0));
+    if let Some(index) = index {
+        access.recent_imports.remove(index);
+        true
+    } else {
+        false
+    }
+}
+
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
 /// so the app's own drop path can't handle them) and feed them through the inbox.
 struct WebShell {
@@ -624,13 +640,11 @@ impl WebShell {
         let now = js_sys::Date::now();
         let documents: Vec<(u64, String)> = self.app.session.documents().iter().map(|document| (document.doc.id.0, document.doc.name.clone())).collect();
         let mut access = self.project_access.lock().unwrap_or_else(|error| error.into_inner());
-        access.recent_imports.retain(|(_, registered)| now - *registered < 60_000.0);
         for (id, name) in documents {
             if !access.known_documents.insert(id) {
                 continue;
             }
-            if let Some(index) = access.recent_imports.iter().position(|(candidate, _)| candidate == &name) {
-                access.recent_imports.swap_remove(index);
+            if consume_recent_import(&mut access, &name, now) {
                 continue;
             }
             let project_key = blank_project_key(id);
@@ -1007,7 +1021,24 @@ fn screen_color_service() -> Option<photocraft_ui_egui::screen_picker::Service> 
 
 #[cfg(test)]
 mod tests {
-    use super::{ProjectAllowanceError, is_preset_library, project_allowance_error};
+    use super::{ProjectAccessState, ProjectAllowanceError, consume_recent_import, is_preset_library, project_allowance_error};
+
+    #[test]
+    fn imported_document_name_normalisation_does_not_schedule_a_second_project() {
+        let mut access = ProjectAccessState { recent_imports: vec![("screenshot.png".into(), 1_000.0)], ..Default::default() };
+
+        assert!(consume_recent_import(&mut access, "screenshot", 1_100.0));
+        assert!(access.recent_imports.is_empty());
+        assert!(!consume_recent_import(&mut access, "another-project", 1_200.0));
+    }
+
+    #[test]
+    fn expired_import_does_not_hide_a_new_blank_project() {
+        let mut access = ProjectAccessState { recent_imports: vec![("old.png".into(), 1_000.0)], ..Default::default() };
+
+        assert!(!consume_recent_import(&mut access, "Untitled-1", 61_001.0));
+        assert!(access.recent_imports.is_empty());
+    }
 
     #[test]
     fn preset_libraries_do_not_consume_image_project_slots() {

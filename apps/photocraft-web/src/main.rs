@@ -159,6 +159,8 @@ mod tests {
         assert!(web.contains("meter_local_project(&project_key).await"));
         assert!(web.contains("PRESET_LIBRARY_EXTS"));
         assert!(web.contains("register_opened_project(&project_access, &name, &bytes)"));
+        assert!(web.contains("consume_recent_import(&mut access, &name, now)"));
+        assert!(web.contains("(!access.recent_imports.is_empty()).then_some(0)"));
         assert!(!web.contains("authorize_opened_project"));
         assert!(web.contains("retry_after_subscription.insert(project_key)"));
         assert!(web.contains("ProjectAllowanceError::Unavailable(message)"));
