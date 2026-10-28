@@ -204,11 +204,10 @@
         method: "POST",
         body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, acceptRecurring: true })
       }), loadWidget()]);
-      // Use CloudPayments' current intent contract. The legacy widget.pay API
-      // is internally bridged to /next/api/intent/pay and can fail before the
-      // card form is shown. Pixelle keeps renewals application-managed, so the
-      // initial Single payment explicitly tokenizes the card without creating
-      // a provider-managed recurrent subscription.
+      // Use the same two-stage card flow as the production AI Neirochat
+      // checkout. CloudPayments authorizes in the widget; Pixelle validates
+      // the exact transaction and captures it on the server before granting
+      // access. Rebilling remains application-managed from the returned token.
       const widget = new window.cp.CloudPayments();
       // CloudPayments mounts its own fixed overlay below Pixelle's deliberately
       // topmost modal layer. Remove the paywall before opening the provider UI;
@@ -217,27 +216,18 @@
       const result = await startWidget(widget, {
         publicTerminalId: order.publicId,
         description: order.description,
-        paymentSchema: "Single",
+        paymentSchema: order.paymentSchema,
         currency: order.currency,
         culture: "ru-RU",
         amount: order.amount,
         externalId: order.orderId,
         receiptEmail: order.email,
         skin: "mini",
-        tokenize: true,
         userInfo: {
           accountId: order.accountId,
           email: order.email,
         },
-        restrictedPaymentMethods: [
-          "Sbp",
-          "TcsInstallment",
-          "TinkoffPay",
-          "MirPay",
-          "Dolyame",
-          "ForeignCard",
-          "SberPay",
-        ],
+        restrictedPaymentMethods: order.restrictedPaymentMethods,
         receipt: cloudPaymentsReceipt(order.receipt),
       });
       if (result?.status !== "success") throw new Error("Платёж не был подтверждён");
