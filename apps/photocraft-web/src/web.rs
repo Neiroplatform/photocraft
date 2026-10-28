@@ -31,6 +31,22 @@ struct BrowserClipboard {
 
 type Clipboard = Arc<Mutex<BrowserClipboard>>;
 
+/// Local project access is checked only after the editor has admitted the document. This keeps
+/// the user's exact in-memory tab alive while the browser-owned authentication and payment
+/// overlays are open.
+type ProjectAccess = Arc<Mutex<ProjectAccessState>>;
+
+const PROJECT_ACCESS_DELAY_MS: f64 = 5_000.0;
+
+#[derive(Default)]
+struct ProjectAccessState {
+    scheduled: HashSet<String>,
+    pending: Vec<(String, f64)>,
+    retry_after_subscription: HashSet<String>,
+    known_documents: HashSet<u64>,
+    recent_imports: Vec<(String, f64)>,
+}
+
 /// Everything File › Open reads: PhotoCraft, Photoshop and Affinity documents, flat images, and
 /// Photoshop brushes (.abr), gradients (.grd) and swatches (.aco, .ase), which go to the preset libraries.
 const OPEN_EXTS: &[&str] = &[
@@ -94,16 +110,22 @@ pub fn start() {
                     PhotocraftApp::setup_context(&cc.egui_ctx, ThemeKind::Pro);
                     let inbox: Inbox = Arc::default();
                     let clipboard: Clipboard = Arc::default();
+                    let project_access: ProjectAccess = Arc::default();
                     let served: Served = Arc::default();
                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
                     let semantic = preload_semantic_model(cc.egui_ctx.clone());
                     let cloud_ai = cloud_ai_service(cc.egui_ctx.clone());
-                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), semantic, cloud_ai));
+                    let mut app = PhotocraftApp::new(Session::new(), services(inbox.clone(), clipboard.clone(), project_access.clone(), semantic, cloud_ai));
+                    // Pixelle's browser product is Russian-first. Keep command ids and the engine
+                    // protocol language-neutral; only the rendered browser UI is switched.
+                    app.session.edit_prefs(|preferences| preferences.interface.language = "ru".into());
+                    photocraft_ui_egui::i18n::sync_context(&cc.egui_ctx, "ru");
                     if let Some(route) = quick_route {
                         app.quick_tool = Some(photocraft_ui_egui::quick_tools_ui::State::new(route));
                     }
                     listen_pen(&pen_target, app.stylus.feed.clone());
-                    listen_image_paste(&paste_target, clipboard.clone(), cc.egui_ctx.clone());
+                    listen_image_paste(&paste_target, clipboard.clone(), project_access.clone(), cc.egui_ctx.clone());
+                    listen_subscription_active(project_access.clone(), cc.egui_ctx.clone());
                     app.set_theme(&cc.egui_ctx, ThemeKind::Pro);
                     if let Some(rs) = cc.wgpu_render_state.clone()
                         && !force_cpu
@@ -113,7 +135,11 @@ pub fn start() {
                     }
                     let unsaved = Arc::new(AtomicBool::new(false));
                     guard_unload(unsaved.clone());
-                    Ok(Box::new(WebShell { app, inbox, clipboard, unsaved, served }))
+                    {
+                        let mut access = project_access.lock().unwrap_or_else(|error| error.into_inner());
+                        access.known_documents.extend(app.session.documents().iter().map(|document| document.doc.id.0));
+                    }
+                    Ok(Box::new(WebShell { app, inbox, clipboard, project_access, unsaved, served }))
                 }),
             )
             .await;
@@ -129,7 +155,7 @@ pub fn start() {
 /// Capture an image placed on the browser clipboard by a screenshot tool or another app. Text
 /// paste is left to egui and focused text fields. Image paste is prevented from becoming a text
 /// event, then completed after the browser has yielded the file bytes.
-fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egui::Context) {
+fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, project_access: ProjectAccess, ctx: egui::Context) {
     use wasm_bindgen::closure::Closure;
     let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(move |event: web_sys::ClipboardEvent| {
         let Some(data) = event.clipboard_data() else {
@@ -155,6 +181,7 @@ fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egu
             state.request
         };
         let clipboard = clipboard.clone();
+        let project_access = project_access.clone();
         let ctx = ctx.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let bytes = wasm_bindgen_futures::JsFuture::from(file.array_buffer())
@@ -162,7 +189,7 @@ fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egu
                 .map(|buffer| js_sys::Uint8Array::new(&buffer).to_vec())
                 .map_err(|error| format!("Could not read the pasted image: {error:?}"));
             let bytes = match bytes {
-                Ok(bytes) => authorize_opened_project(&name, &bytes).await.map(|()| bytes),
+                Ok(bytes) => register_opened_project(&project_access, &name, &bytes).map(|()| bytes),
                 Err(error) => Err(error),
             };
             clipboard.lock().unwrap_or_else(|error| error.into_inner()).arrived.push((request, bytes.map(|bytes| (name, bytes))));
@@ -171,6 +198,23 @@ fn listen_image_paste(target: &web_sys::Document, clipboard: Clipboard, ctx: egu
     });
     if target.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref()).is_ok() {
         cb.forget();
+    }
+}
+
+/// A successful checkout keeps the same editor instance and document tabs. Re-run only the
+/// project usage admission that was denied before authentication/payment.
+fn listen_subscription_active(project_access: ProjectAccess, ctx: egui::Context) {
+    use wasm_bindgen::closure::Closure;
+    let Some(window) = web_sys::window() else { return };
+    let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+        let now = js_sys::Date::now();
+        let mut access = project_access.lock().unwrap_or_else(|error| error.into_inner());
+        let retry = std::mem::take(&mut access.retry_after_subscription);
+        access.pending.extend(retry.into_iter().map(|key| (key, now)));
+        ctx.request_repaint();
+    });
+    if window.add_event_listener_with_callback("pixelle:subscription-active", callback.as_ref().unchecked_ref()).is_ok() {
+        callback.forget();
     }
 }
 
@@ -496,11 +540,10 @@ fn project_allowance_error(status: u16) -> ProjectAllowanceError {
     }
 }
 
-async fn meter_local_project(bytes: &[u8]) -> Result<(), ProjectAllowanceError> {
+async fn meter_local_project(project_key: &str) -> Result<(), ProjectAllowanceError> {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_futures::JsFuture;
 
-    let project_key = format!("{:x}", Sha256::digest(bytes));
     let body =
         serde_json::to_string(&serde_json::json!({ "projectKey": project_key })).map_err(|error| ProjectAllowanceError::Unavailable(error.to_string()))?;
     let init = web_sys::RequestInit::new();
@@ -536,24 +579,30 @@ fn is_preset_library(name: &str) -> bool {
     PRESET_LIBRARY_EXTS.contains(&extension.as_str())
 }
 
-/// Validate through the canonical importer before consuming a project slot.
-/// Preset-library imports are editor resources, not image projects, and never
-/// count against the period allowance.
-async fn authorize_opened_project(name: &str, bytes: &[u8]) -> Result<(), String> {
+/// Validate through the canonical importer, then schedule access five seconds later. The bytes
+/// enter the editor immediately; authentication/payment is an overlay over that exact tab.
+/// Preset-library imports are editor resources and never consume an image-project slot.
+fn register_opened_project(project_access: &ProjectAccess, name: &str, bytes: &[u8]) -> Result<(), String> {
     if is_preset_library(name) {
         return Ok(());
     }
     photocraft_io::import(name, bytes).map_err(|error| format!("Could not open {name}: {error}"))?;
-    match meter_local_project(bytes).await {
-        Ok(()) => Ok(()),
-        Err(ProjectAllowanceError::Denied(message)) => Err(message),
-        Err(ProjectAllowanceError::Unavailable(message)) => {
-            // Local editing must remain available during a billing/control-plane outage. Cloud AI
-            // remains fail-closed at its own authorization boundary before any pixels leave the browser.
-            log::warn!("{message}; opening the local project without metering");
-            Ok(())
-        }
+    let project_key = format!("{:x}", Sha256::digest(bytes));
+    schedule_project_access(project_access, name, project_key);
+    Ok(())
+}
+
+fn schedule_project_access(project_access: &ProjectAccess, name: &str, project_key: String) {
+    let mut access = project_access.lock().unwrap_or_else(|error| error.into_inner());
+    let now = js_sys::Date::now();
+    access.recent_imports.push((name.to_string(), now));
+    if access.scheduled.insert(project_key.clone()) {
+        access.pending.push((project_key, now + PROJECT_ACCESS_DELAY_MS));
     }
+}
+
+fn blank_project_key(document_id: u64) -> String {
+    format!("{:x}", Sha256::digest(format!("pixelle:new:{document_id}").as_bytes()))
 }
 
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously,
@@ -562,12 +611,76 @@ struct WebShell {
     app: PhotocraftApp,
     inbox: Inbox,
     clipboard: Clipboard,
+    project_access: ProjectAccess,
     /// Read by the `beforeunload` listener ([`guard_unload`]).
     unsaved: Arc<AtomicBool>,
     served: Served,
 }
 
 impl WebShell {
+    /// Notice documents only after the editor has admitted them. Imported files already have a
+    /// content-derived project key; documents created by File › New receive a session-unique key.
+    fn observe_project_documents(&mut self) {
+        let now = js_sys::Date::now();
+        let documents: Vec<(u64, String)> = self.app.session.documents().iter().map(|document| (document.doc.id.0, document.doc.name.clone())).collect();
+        let mut access = self.project_access.lock().unwrap_or_else(|error| error.into_inner());
+        access.recent_imports.retain(|(_, registered)| now - *registered < 60_000.0);
+        for (id, name) in documents {
+            if !access.known_documents.insert(id) {
+                continue;
+            }
+            if let Some(index) = access.recent_imports.iter().position(|(candidate, _)| candidate == &name) {
+                access.recent_imports.swap_remove(index);
+                continue;
+            }
+            let project_key = blank_project_key(id);
+            if access.scheduled.insert(project_key.clone()) {
+                access.pending.push((project_key, now + PROJECT_ACCESS_DELAY_MS));
+            }
+        }
+    }
+
+    /// Run due access checks without blocking rendering. A denied check opens browser chrome over
+    /// the current session; an unavailable billing control plane never destroys local work.
+    fn poll_project_access(&mut self, ctx: &egui::Context) {
+        let now = js_sys::Date::now();
+        let (due, next) = {
+            let mut access = self.project_access.lock().unwrap_or_else(|error| error.into_inner());
+            let mut due = Vec::new();
+            let mut pending = Vec::new();
+            for (key, deadline) in std::mem::take(&mut access.pending) {
+                if deadline <= now {
+                    due.push(key);
+                } else {
+                    pending.push((key, deadline));
+                }
+            }
+            let next = pending.iter().map(|(_, deadline)| *deadline).min_by(f64::total_cmp);
+            access.pending = pending;
+            (due, next)
+        };
+        if let Some(deadline) = next {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(((deadline - now) / 1_000.0).max(0.0)));
+        }
+        for project_key in due {
+            let project_access = self.project_access.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                match meter_local_project(&project_key).await {
+                    Ok(()) => {}
+                    Err(ProjectAllowanceError::Denied(message)) => {
+                        project_access.lock().unwrap_or_else(|error| error.into_inner()).retry_after_subscription.insert(project_key);
+                        log::warn!("{message}; the opened project remains in the editor while access is completed");
+                    }
+                    Err(ProjectAllowanceError::Unavailable(message)) => {
+                        // Cloud AI remains fail-closed at its own authorization boundary before any
+                        // pixels leave the browser, but local editing survives a control-plane outage.
+                        log::warn!("{message}; keeping the opened local project available");
+                    }
+                }
+            });
+        }
+    }
+
     /// Decode only the newest pasted image. Older asynchronous reads cannot replace a later
     /// clipboard gesture when their promises finish out of order.
     fn receive_clipboard_image(&mut self) {
@@ -657,16 +770,17 @@ impl eframe::App for WebShell {
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {
             let inbox = self.inbox.clone();
+            let project_access = self.project_access.clone();
             let ctx = ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped".into());
                 match f.bytes_async().await {
-                    Ok(bytes) => match authorize_opened_project(&name, &bytes).await {
+                    Ok(bytes) => match register_opened_project(&project_access, &name, &bytes) {
                         Ok(()) => {
                             inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                             ctx.request_repaint();
                         }
-                        Err(error) => log::warn!("couldn't authorize dropped project {name}: {error}"),
+                        Err(error) => log::warn!("couldn't open dropped project {name}: {error}"),
                     },
                     Err(e) => log::error!("couldn't read dropped file {name}: {e}"),
                 }
@@ -675,6 +789,8 @@ impl eframe::App for WebShell {
         self.receive_clipboard_image();
         self.serve_fonts(ctx);
         self.app.logic(ctx, frame);
+        self.observe_project_documents();
+        self.poll_project_access(ctx);
         self.finish_clipboard_paste(ctx);
         self.unsaved.store(self.app.has_unsaved_work(), Ordering::Relaxed);
     }
@@ -687,6 +803,7 @@ impl eframe::App for WebShell {
 fn services(
     inbox: Inbox,
     clipboard: Clipboard,
+    project_access: ProjectAccess,
     semantic_select: Option<photocraft_ui_egui::semantic_select_ui::Service>,
     cloud_ai_edit: Option<photocraft_ui_egui::cloud_ai_edit_ui::Service>,
 ) -> Services {
@@ -716,25 +833,28 @@ fn services(
             opts.xmp = if settings.xmp_all { photocraft_io::XmpEmbed::All } else { photocraft_io::XmpEmbed::None };
             photocraft_io::export(doc, path, &opts).map(|r| (r.bytes, r.warnings)).map_err(|e| e.to_string())
         })),
-        file_dialog: Some(Box::new(|request, _parent, reply| match request {
+        file_dialog: Some(Box::new(move |request, _parent, reply| match request {
             // The browser's file picker hands over the file's contents, not a path.
-            FileDialogRequest::Open { .. } => wasm_bindgen_futures::spawn_local(async move {
-                let picked = rfd::AsyncFileDialog::new().add_filter("All Formats", OPEN_EXTS).pick_file().await;
-                let answer = match picked {
-                    Some(file) => {
-                        let bytes = file.read().await;
-                        match authorize_opened_project(&file.file_name(), &bytes).await {
-                            Ok(()) => Some(FileDialogAnswer::Contents(file.file_name(), bytes)),
-                            Err(error) => {
-                                log::warn!("couldn't authorize opened project: {error}");
-                                None
+            FileDialogRequest::Open { .. } => {
+                let project_access = project_access.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let picked = rfd::AsyncFileDialog::new().add_filter("All Formats", OPEN_EXTS).pick_file().await;
+                    let answer = match picked {
+                        Some(file) => {
+                            let bytes = file.read().await;
+                            match register_opened_project(&project_access, &file.file_name(), &bytes) {
+                                Ok(()) => Some(FileDialogAnswer::Contents(file.file_name(), bytes)),
+                                Err(error) => {
+                                    log::warn!("couldn't open selected project: {error}");
+                                    None
+                                }
                             }
                         }
-                    }
-                    None => None,
-                };
-                reply.send(answer);
-            }),
+                        None => None,
+                    };
+                    reply.send(answer);
+                })
+            }
             // No save dialog on the web: the suggested name becomes the download name.
             FileDialogRequest::Save { suggested } => {
                 let name = std::path::Path::new(&suggested).file_name().map_or_else(|| suggested.clone(), |n| n.to_string_lossy().to_string());

@@ -1389,7 +1389,8 @@
 # New Document dialog
 	PRESET DETAILS	ПАРАМЕТРЫ НАБОРА
 	BLANK DOCUMENT PRESETS ({n})	НАБОРЫ ПУСТЫХ ДОКУМЕНТОВ ({n})
-	Create a new document or open an existing file.	Создайте новый документ или откройте существующий файл.
+	Create a new document or open an existing file.	Создайте новый проект или откройте изображение.
+	Create new project	Создать новый проект
 	Drop an image or PSD anywhere to open it.	Перетащите изображение или PSD в любое место окна, чтобы открыть.
 	Use File › Open, or paste a copied image with {paste}.	Выберите Файл › Открыть или вставьте скопированное изображение с помощью {paste}.
 	Native file drag-and-drop is unavailable	Нативное перетаскивание файлов в Wayland недоступно

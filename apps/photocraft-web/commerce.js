@@ -89,7 +89,14 @@
       await request("/auth/exchange", { method: "POST", body: JSON.stringify({ code: event.data.code }) });
       const next = returnToPaywall;
       closeLayer();
-      if (next) showPaywall();
+      if (next) {
+        const status = await request("/subscription/status").catch(() => null);
+        if (status && status.status !== "none") {
+          window.dispatchEvent(new CustomEvent("pixelle:subscription-active"));
+        } else {
+          showPaywall();
+        }
+      }
     } catch {
       frameError("Не удалось завершить вход. Закройте форму и попробуйте ещё раз.");
     }
