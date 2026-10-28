@@ -185,6 +185,18 @@
     };
   }
 
+  function restorePaywallAfterCheckoutError(message) {
+    showPaywall();
+    const consent = activeLayer?.querySelector("#pixelle-terms");
+    const recurring = activeLayer?.querySelector("#pixelle-recurring");
+    if (consent && recurring) {
+      consent.checked = true;
+      recurring.checked = true;
+      consent.dispatchEvent(new Event("change"));
+    }
+    frameError(message);
+  }
+
   async function checkout(button, consent, recurring) {
     if (!consent.checked || !recurring.checked) return;
     button.disabled = true;
@@ -230,8 +242,7 @@
       if (error.status === 401) { showAuth(true); return; }
       const message = error.message || "Не удалось открыть оплату. Попробуйте позже.";
       if (!activeLayer) {
-        showPaywall();
-        frameError(message);
+        restorePaywallAfterCheckoutError(message);
         return;
       }
       frameError(message);
