@@ -115,6 +115,8 @@ mod tests {
         assert!(web.contains("401 => open_commerce_auth_then_paywall()"));
         assert!(web.contains("open_commerce_method(\"showAuth\", Some(true))"));
         assert!(web.contains("403 => open_commerce_paywall()"));
+        assert!(commerce.contains("window.dispatchEvent(new CustomEvent(\"pixelle:subscription-active\"))"));
+        assert!(!commerce.contains("location.href ="), "auth/payment must not navigate away from the open editor session");
     }
 
     #[test]
@@ -148,15 +150,37 @@ mod tests {
     }
 
     #[test]
-    fn project_quota_is_applied_after_import_validation_without_making_local_editing_depend_on_billing_uptime() {
+    fn project_access_is_delayed_until_after_the_document_is_open_and_keeps_the_session_alive() {
         let web = include_str!("web.rs");
         assert!(web.contains("photocraft_io::import(name, bytes)"));
-        assert!(web.contains("meter_local_project(bytes).await"));
+        assert!(web.contains("const PROJECT_ACCESS_DELAY_MS: f64 = 5_000.0"));
+        assert!(web.contains("self.app.logic(ctx, frame);\n        self.observe_project_documents();\n        self.poll_project_access(ctx);"));
+        assert!(web.contains("access.pending.push((project_key, now + PROJECT_ACCESS_DELAY_MS))"));
+        assert!(web.contains("meter_local_project(&project_key).await"));
         assert!(web.contains("PRESET_LIBRARY_EXTS"));
-        assert!(web.contains("authorize_opened_project(&name, &bytes).await"));
-        assert!(web.contains("Err(ProjectAllowanceError::Denied(message)) => Err(message)"));
+        assert!(web.contains("register_opened_project(&project_access, &name, &bytes)"));
+        assert!(!web.contains("authorize_opened_project"));
+        assert!(web.contains("retry_after_subscription.insert(project_key)"));
         assert!(web.contains("ProjectAllowanceError::Unavailable(message)"));
-        assert!(web.contains("opening the local project without metering"));
-        assert!(!web.contains("Ok(bytes) => meter_local_project(&bytes).await"));
+        assert!(web.contains("keeping the opened local project available"));
+    }
+
+    #[test]
+    fn browser_start_screen_is_russian_and_open_accepts_supported_image_families() {
+        let web = include_str!("web.rs");
+        let russian = include_str!("../../../crates/ui-egui/src/i18n/ru.tsv");
+        assert!(web.contains("preferences.interface.language = \"ru\".into()"));
+        assert!(web.contains("i18n::sync_context(&cc.egui_ctx, \"ru\")"));
+        let canvas = include_str!("../../../crates/ui-egui/src/canvas.rs");
+        assert!(canvas.contains("current().code() == \"ru\""));
+        assert!(canvas.contains("{ \"Create new project\" } else { \"New document…\" }"));
+        assert!(canvas.contains("command_label(app, \"Open\", \"file.open\")"));
+        assert!(russian.contains("Create new project\tСоздать новый проект"));
+        assert!(russian.contains("Open\tОткрыть"));
+        assert!(russian.contains("Создайте новый проект или откройте изображение."));
+        for extension in ["png", "jpg", "jpeg", "tif", "tiff", "webp", "gif", "bmp", "svg", "heic", "dng", "cr2", "nef", "arw", "psd", "psb"] {
+            assert!(web.contains(&format!("\"{extension}\"")), "missing browser Open format: {extension}");
+        }
+        assert!(web.contains("add_filter(\"All Formats\", OPEN_EXTS).pick_file()"));
     }
 }

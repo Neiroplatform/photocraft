@@ -1885,8 +1885,9 @@ fn start_screen(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let recent: Vec<String> = if cfg!(target_arch = "wasm32") { Vec::new() } else { app.ui.recent_files.iter().take(HOME_RECENT).cloned().collect() };
     let recent_h = if recent.is_empty() { 0.0 } else { 34.0 + recent.len() as f32 * HOME_RECENT_ROW };
     let card = Rect::from_center_size(area.center(), egui::vec2(460.0, 250.0 + recent_h));
-    let new_label = crate::shortcuts::command_label(app, "New document…", "file.new");
-    let open_label = crate::shortcuts::command_label(app, "Open…", "file.open");
+    let new_source = if crate::i18n::current().code() == "ru" { "Create new project" } else { "New document…" };
+    let new_label = crate::shortcuts::command_label(app, new_source, "file.new");
+    let open_label = crate::shortcuts::command_label(app, "Open", "file.open");
     ui.scope_builder(egui::UiBuilder::new().max_rect(card), |ui| {
         ui.vertical_centered(|ui| {
             ui.horizontal(|ui| {
