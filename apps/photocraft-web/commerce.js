@@ -2,6 +2,7 @@
   "use strict";
   const API = "/api/v1/pixelle";
   const AUTH = "https://auth.neiro-platform.ru";
+  const CAMPAIGN_STORAGE_KEY = "pixelle-retention-campaign";
   let activeLayer = null;
   let previousFocus = null;
   let returnToPaywall = false;
@@ -10,6 +11,28 @@
     try { const url = new URL(String(value)); return url.protocol === "https:" ? escapeHtml(url.href) : ""; }
     catch { return ""; }
   };
+
+  function captureMarketingCampaign() {
+    const url = new URL(location.href);
+    const token = url.searchParams.get("campaign");
+    if (!token) return;
+    if (/^[A-Za-z0-9_-]{24,96}$/.test(token)) {
+      try { sessionStorage.setItem(CAMPAIGN_STORAGE_KEY, token); } catch { /* the link still opens without attribution */ }
+    }
+    url.searchParams.delete("campaign");
+    history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function storedCampaignToken() {
+    try { return sessionStorage.getItem(CAMPAIGN_STORAGE_KEY) || undefined; }
+    catch { return undefined; }
+  }
+
+  function clearStoredCampaignToken() {
+    try { sessionStorage.removeItem(CAMPAIGN_STORAGE_KEY); } catch { /* unavailable storage has nothing to clear */ }
+  }
+
+  captureMarketingCampaign();
 
   async function request(path, options = {}) {
     const response = await fetch(`${API}${path}`, {
@@ -86,7 +109,12 @@
   window.addEventListener("message", async (event) => {
     if (event.origin !== new URL(AUTH).origin || event.data?.type !== "auth_exchange" || typeof event.data.code !== "string") return;
     try {
-      await request("/auth/exchange", { method: "POST", body: JSON.stringify({ code: event.data.code }) });
+      const campaignToken = storedCampaignToken();
+      await request("/auth/exchange", {
+        method: "POST",
+        body: JSON.stringify({ code: event.data.code, ...(campaignToken ? { campaignToken } : {}) })
+      });
+      clearStoredCampaignToken();
       const next = returnToPaywall;
       closeLayer();
       if (next) {
@@ -344,16 +372,28 @@
     const receiptItems = receipts.length
       ? receipts.map((receipt) => { const url = receiptUrl(receipt.ofd_receipt_url); return `<li>${new Date(receipt.created_at).toLocaleDateString("ru-RU")} · ${(Number(receipt.amount_kopecks || 0) / 100).toLocaleString("ru-RU")} ₽${url ? ` · <a href="${url}" target="_blank" rel="noreferrer">Открыть чек</a>` : " · чек обрабатывается"}</li>`; }).join("")
       : "<li>Чеков пока нет</li>";
-    const cancellation = status.cancelAtPeriodEnd
+    const cancellation = status.canCancel === false
+      ? ""
+      : status.cancelAtPeriodEnd
       ? `<p class="px-commerce-note">Будущие списания отменены. Доступ сохранится до ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "конца оплаченного периода"}.</p>`
       : `<button class="px-commerce-primary" data-action="cancel" type="button">Отменить будущие списания</button><p class="px-commerce-note">Доступ сохранится до конца уже оплаченного периода.</p>`;
-    card.innerHTML = `<div class="px-commerce-stripe"></div><div class="px-commerce-head"><h2>Pixelle Pro</h2><p>Статус: ${status.status === "trial" ? "пробный период" : "активна"}</p></div><div class="px-commerce-body"><ul class="px-commerce-benefits"><li>Локальные проекты: ${project.used} из ${project.limit}</li><li>Облачный ИИ: ${(cloud.used / 100).toLocaleString("ru-RU")} ₽ из ${(cloud.limit / 100).toLocaleString("ru-RU")} ₽</li><li>Период до: ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "—"}</li></ul><h3>Фискальные чеки</h3><ul>${receiptItems}</ul>${cancellation}</div>`;
+    const deletion = status.canDeleteProfile === false
+      ? ""
+      : `<button class="px-commerce-danger" data-action="delete-account" type="button">Удалить аккаунт</button>`;
+    card.innerHTML = `<div class="px-commerce-stripe"></div><div class="px-commerce-head"><h2>Pixelle Pro</h2><p>Статус: ${status.status === "trial" ? "пробный период" : "активна"}</p></div><div class="px-commerce-body"><ul class="px-commerce-benefits"><li>Локальные проекты: ${project.used} из ${project.limit}</li><li>Облачный ИИ: ${(cloud.used / 100).toLocaleString("ru-RU")} ₽ из ${(cloud.limit / 100).toLocaleString("ru-RU")} ₽</li><li>Период до: ${status.periodEnd ? new Date(status.periodEnd).toLocaleString("ru-RU") : "—"}</li></ul><h3>Фискальные чеки</h3><ul>${receiptItems}</ul>${cancellation}${deletion}</div>`;
     card.append(closeButton());
     card.querySelector('[data-action="cancel"]')?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
       try { await request("/subscription/cancel", { method: "POST" }); closeLayer(); }
       catch (error) { frameError(error.message || "Не удалось отменить подписку"); button.disabled = false; }
+    });
+    card.querySelector('[data-action="delete-account"]')?.addEventListener("click", async (event) => {
+      if (!confirm("Удалить аккаунт Pixelle? Подписка будет отменена, а восстановить профиль будет нельзя.")) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      try { await request("/auth/account/delete", { method: "POST" }); closeLayer(); }
+      catch (error) { frameError(error.message || "Не удалось удалить аккаунт"); button.disabled = false; }
     });
     return card;
   }

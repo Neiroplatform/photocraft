@@ -31,6 +31,9 @@
 .px-commerce-primary { width: 100%; min-height: 48px; margin-top: 18px; border: 0; border-radius: 12px; background: var(--px-accent); color: #161a0b; font-weight: 750; cursor: pointer; }
 .px-commerce-primary:hover { background: #c8ff3f; }
 .px-commerce-primary:disabled { cursor: not-allowed; opacity: .42; }
+.px-commerce-danger { width: 100%; min-height: 44px; margin-top: 18px; border: 1px solid #8f4f50; border-radius: 12px; background: transparent; color: #ffb7b8; font-weight: 700; cursor: pointer; }
+.px-commerce-danger:hover { background: rgba(220, 76, 78, .12); }
+.px-commerce-danger:disabled { cursor: not-allowed; opacity: .42; }
 .px-commerce-note { margin: 14px 0 0; color: var(--px-muted); font-size: 12px; }
 .px-commerce-error { margin: 14px 0 0; padding: 11px 12px; border-radius: 10px; background: rgba(231,76,60,.14); color: #ffc0ba; }
 .px-commerce-backdrop .paywall-modal {
