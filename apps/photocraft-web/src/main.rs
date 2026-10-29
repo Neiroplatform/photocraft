@@ -120,6 +120,19 @@ mod tests {
     }
 
     #[test]
+    fn marketing_campaign_is_bound_to_pixelle_auth_and_hides_profile_actions() {
+        let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("pixelle-retention-campaign"));
+        assert!(commerce.contains("url.searchParams.get(\"campaign\")"));
+        assert!(commerce.contains("history.replaceState"));
+        assert!(commerce.contains("...(campaignToken ? { campaignToken } : {})"));
+        assert!(commerce.contains("status.canCancel === false"));
+        assert!(commerce.contains("status.canDeleteProfile === false"));
+        assert!(commerce.contains("/auth/account/delete"));
+        assert!(commerce.contains("Удалить аккаунт"));
+    }
+
+    #[test]
     fn checkout_errors_remain_inside_the_scrollable_paywall_body() {
         let commerce = include_str!("../commerce.js");
         let styles = include_str!("../commerce.css");
