@@ -469,5 +469,6 @@
   }
 
   window.PixelleCommerce = { showPaywall, showSupport, showAuth, showAccount };
+  bindMetrikaClientId();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addButtons); else addButtons();
 })();

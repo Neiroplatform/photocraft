@@ -144,6 +144,7 @@ mod tests {
         assert!(commerce.contains("/analytics/metrika-client"));
         assert!(commerce.contains("\"getClientID\""));
         assert!(commerce.contains("\"setUserID\""));
+        assert!(commerce.contains("bindMetrikaClientId();"), "existing authenticated sessions must also bind ClientID");
         assert!(!commerce.contains("payment_trial\""), "financial facts must remain server-side only");
     }
 
