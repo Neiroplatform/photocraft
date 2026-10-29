@@ -1892,13 +1892,9 @@ fn start_screen(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
             ui.horizontal(|ui| {
                 let title = ui.painter().layout_no_wrap(tl!("Pixelle").into(), crate::theme::semibold(38.0), t.text);
-                let by = ui.painter().layout_no_wrap(tl!("open source").into(), egui::FontId::proportional(13.0), t.text_faint);
-                let total = title.size().x + by.size().x + 10.0;
-                ui.add_space(((card.width() - total) / 2.0).max(0.0));
+                ui.add_space(((card.width() - title.size().x) / 2.0).max(0.0));
                 let (r, _) = ui.allocate_exact_size(title.size(), Sense::hover());
                 ui.painter().galley(r.min, title, t.text);
-                let (r2, _) = ui.allocate_exact_size(egui::vec2(by.size().x + 10.0, r.height()), Sense::hover());
-                ui.painter().galley(egui::pos2(r2.left() + 10.0, r.bottom() - by.size().y - 8.0), by, t.text_faint);
             });
             ui.add_space(6.0);
             ui.label(egui::RichText::new(tl!("Create a new document or open an existing file.")).color(t.text_dim).size(14.0));
@@ -4286,6 +4282,32 @@ mod tests {
         let hint = start_screen_drop_hint(&wayland);
         assert!(!hint.contains("Drop"), "{hint}");
         assert!(hint.ends_with(&format!("paste a copied image with {}.", crate::notices::paste_hint(&wayland))), "{hint}");
+    }
+
+    #[test]
+    fn start_screen_shows_only_the_pixelle_product_name() {
+        fn collect_text(shape: &egui::Shape, text: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(shape) => text.push(shape.galley.text().to_string()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| collect_text(shape, text)),
+                _ => {}
+            }
+        }
+
+        let russian = crate::i18n::Lang::from_code("ru").expect("Russian catalog is registered");
+        crate::i18n::with_language(russian, || {
+            let ctx = egui::Context::default();
+            crate::PhotocraftApp::setup_context(&ctx, crate::theme::ThemeKind::ALL[0]);
+            let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| start_screen(&mut app, ui));
+            let mut text = Vec::new();
+            for shape in &output.shapes {
+                collect_text(&shape.shape, &mut text);
+            }
+            output.textures_delta.clear();
+            assert!(text.iter().any(|value| value == "Pixelle"), "{text:?}");
+            assert!(!text.iter().any(|value| value == "открытый исходный код"), "{text:?}");
+        });
     }
 
     #[test]
