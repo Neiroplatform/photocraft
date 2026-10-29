@@ -2,6 +2,11 @@
   "use strict";
   const API = "/api/v1/pixelle";
   const AUTH = "https://auth.neiro-platform.ru";
+  const METRIKA_COUNTER_ID = 113889832;
+  const PIXELLE_METRIKA_TARGETS = {
+    registrationOpen: "registration_open",
+    paywallOpen: "paywall_open"
+  };
   const CAMPAIGN_STORAGE_KEY = "pixelle-retention-campaign";
   let activeLayer = null;
   let previousFocus = null;
@@ -11,6 +16,38 @@
     try { const url = new URL(String(value)); return url.protocol === "https:" ? escapeHtml(url.href) : ""; }
     catch { return ""; }
   };
+
+  function metrikaGoal(target, params = {}) {
+    let attempt = 0;
+    const send = () => {
+      if (typeof window.ym === "function") {
+        window.ym(METRIKA_COUNTER_ID, "reachGoal", target, params);
+        return;
+      }
+      if (attempt++ < 20) setTimeout(send, 250);
+    };
+    send();
+  }
+
+  function bindMetrikaClientId(userId) {
+    let attempt = 0;
+    const bind = () => {
+      if (typeof window.ym !== "function") {
+        if (attempt++ < 40) setTimeout(bind, 250);
+        return;
+      }
+      if (userId) window.ym(METRIKA_COUNTER_ID, "setUserID", userId);
+      window.ym(METRIKA_COUNTER_ID, "getClientID", (clientId) => {
+        if (!/^\d{3,64}$/.test(String(clientId || ""))) return;
+        void request("/analytics/metrika-client", {
+          method: "POST",
+          body: JSON.stringify({ clientId: String(clientId) }),
+          keepalive: true
+        }).catch(() => {});
+      });
+    };
+    bind();
+  }
 
   function captureMarketingCampaign() {
     const url = new URL(location.href);
@@ -104,16 +141,18 @@
     frame.src = `${AUTH}/auth/login?origin=${encodeURIComponent(location.origin)}`;
     box.append(frame);
     layer(box);
+    metrikaGoal(PIXELLE_METRIKA_TARGETS.registrationOpen);
   }
 
   window.addEventListener("message", async (event) => {
     if (event.origin !== new URL(AUTH).origin || event.data?.type !== "auth_exchange" || typeof event.data.code !== "string") return;
     try {
       const campaignToken = storedCampaignToken();
-      await request("/auth/exchange", {
+      const exchange = await request("/auth/exchange", {
         method: "POST",
         body: JSON.stringify({ code: event.data.code, ...(campaignToken ? { campaignToken } : {}) })
       });
+      bindMetrikaClientId(exchange.user?.id);
       clearStoredCampaignToken();
       const next = returnToPaywall;
       closeLayer();
@@ -326,6 +365,7 @@
     recurring.addEventListener("change", sync);
     pay.addEventListener("click", () => checkout(pay, consent, recurring));
     layer(card);
+    metrikaGoal(PIXELLE_METRIKA_TARGETS.paywallOpen);
     request("/subscription/status").then((status) => {
       if (status.trialAvailable !== false) return;
       const title = card.querySelector("#pixelle-paywall-title");

@@ -21,6 +21,8 @@
   <link rel="dns-prefetch" href="https://widget.cloudpayments.ru">
   <link rel="preconnect" href="https://widget.cloudpayments.ru" crossorigin>
   <link rel="preload" href="https://widget.cloudpayments.ru/bundles/cloudpayments.js" as="script">
+  <link rel="dns-prefetch" href="https://mc.yandex.ru">
+  <link rel="preconnect" href="https://mc.yandex.ru" crossorigin>
   <link data-trunk rel="rust" href="Cargo.toml" data-bin="photocraft-ml-worker" data-type="worker" data-loader-shim data-cargo-features="ml-worker" data-cargo-profile="wasm-release" data-wasm-opt="z" />
   <link data-trunk rel="rust" data-bin="photocraft-web" data-cargo-profile="wasm-release" data-cargo-features="heif" data-wasm-opt="z" data-weak-refs />
   <style>
@@ -35,8 +37,20 @@
     #photocraft_stalled { color: #8c8c8c; visibility: hidden; animation: photocraft-stalled 0s 20s forwards; }
     @keyframes photocraft-stalled { to { visibility: visible; } }
   </style>
+  <!-- Yandex.Metrika counter -->
+  <script>
+    (function(m,e,t,r,i,k,a){
+      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window,document,"script","https://mc.yandex.ru/metrika/tag.js?id=113889832","ym");
+    ym(113889832,"init",{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+  </script>
+  <!-- /Yandex.Metrika counter -->
 </head>
 <body>
+  <noscript><div><img src="https://mc.yandex.ru/watch/113889832" style="position:absolute;left:-9999px" alt=""></div></noscript>
   <canvas id="photocraft_canvas"></canvas>
   <div id="photocraft_loading">
     <p>Loading Pixelle&hellip;</p>

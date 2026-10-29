@@ -55,8 +55,11 @@ mod tests {
         assert!(hint.contains("failed to") && hint.contains("<a href=\"\">Reload</a>"), "{hint}");
         assert!(html.contains("animation: photocraft-stalled"), "the hint appears after a delay");
         let scripts: Vec<_> = html.match_indices("<script").collect();
-        assert_eq!(scripts.len(), 1, "only the commerce shell may be hand-written; Trunk injects the editor loader");
+        assert_eq!(scripts.len(), 2, "only the Metrika bootstrap and commerce shell may be hand-written; Trunk injects the editor loader");
         assert!(html.contains("<script src=\"commerce.js\" defer></script>"));
+        assert!(html.contains("https://mc.yandex.ru/metrika/tag.js?id=113889832"));
+        assert!(html.contains("ym(113889832,\"init\""));
+        assert!(html.contains("https://mc.yandex.ru/watch/113889832"));
         assert!(html.contains("rel=\"dns-prefetch\" href=\"https://widget.cloudpayments.ru\""));
         assert!(html.contains("rel=\"preconnect\" href=\"https://widget.cloudpayments.ru\" crossorigin"));
         assert!(html.contains("rel=\"preload\" href=\"https://widget.cloudpayments.ru/bundles/cloudpayments.js\" as=\"script\""));
@@ -130,6 +133,18 @@ mod tests {
         assert!(commerce.contains("status.canDeleteProfile === false"));
         assert!(commerce.contains("/auth/account/delete"));
         assert!(commerce.contains("Удалить аккаунт"));
+    }
+
+    #[test]
+    fn pixelle_metrika_tracks_browser_displays_and_binds_the_server_client_id() {
+        let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("const METRIKA_COUNTER_ID = 113889832"));
+        assert!(commerce.contains("registration_open"));
+        assert!(commerce.contains("paywall_open"));
+        assert!(commerce.contains("/analytics/metrika-client"));
+        assert!(commerce.contains("\"getClientID\""));
+        assert!(commerce.contains("\"setUserID\""));
+        assert!(!commerce.contains("payment_trial\""), "financial facts must remain server-side only");
     }
 
     #[test]
