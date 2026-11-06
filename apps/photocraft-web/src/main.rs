@@ -151,6 +151,9 @@ mod tests {
     #[test]
     fn paywall_display_goal_requires_an_authenticated_subscription_status() {
         let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("activeLayer?.querySelector(\".px-commerce-auth\")"));
+        assert!(commerce.contains("returnToPaywall = returnToPaywall || nextPaywall"));
+        assert!(commerce.contains("activeLayer?.querySelector(\".paywall-modal\")"));
         let (_, guarded_paywall) =
             commerce.split_once("async function showPaywall(knownStatus)").expect("paywall entrypoint must authenticate before rendering");
         let (guarded_paywall, _) = guarded_paywall.split_once("function showSupport()").expect("bounded paywall entrypoint");

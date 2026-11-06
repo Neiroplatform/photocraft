@@ -129,6 +129,10 @@
   }
 
   function showAuth(nextPaywall = false) {
+    if (activeLayer?.querySelector(".px-commerce-auth")) {
+      returnToPaywall = returnToPaywall || nextPaywall;
+      return;
+    }
     returnToPaywall = nextPaywall;
     const box = document.createElement("div");
     box.className = "px-commerce-auth";
@@ -332,6 +336,7 @@
   }
 
   function renderPaywall(status) {
+    if (activeLayer?.querySelector(".paywall-modal")) return;
     const card = document.createElement("section");
     card.className = "paywall-modal ym-hide-content";
     card.setAttribute("role", "dialog");
