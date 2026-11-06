@@ -129,6 +129,10 @@
   }
 
   function showAuth(nextPaywall = false) {
+    if (activeLayer?.querySelector(".px-commerce-auth")) {
+      returnToPaywall = returnToPaywall || nextPaywall;
+      return;
+    }
     returnToPaywall = nextPaywall;
     const box = document.createElement("div");
     box.className = "px-commerce-auth";
@@ -155,14 +159,16 @@
       bindMetrikaClientId(exchange.user?.id);
       clearStoredCampaignToken();
       const next = returnToPaywall;
-      closeLayer();
       if (next) {
-        const status = await request("/subscription/status").catch(() => null);
-        if (status && status.status !== "none") {
+        const status = await request("/subscription/status");
+        closeLayer();
+        if (status.status !== "none") {
           window.dispatchEvent(new CustomEvent("pixelle:subscription-active"));
         } else {
-          showPaywall();
+          await showPaywall(status);
         }
+      } else {
+        closeLayer();
       }
     } catch {
       frameError("Не удалось завершить вход. Закройте форму и попробуйте ещё раз.");
@@ -257,8 +263,8 @@
     };
   }
 
-  function restorePaywallAfterCheckoutError(message) {
-    showPaywall();
+  async function restorePaywallAfterCheckoutError(message) {
+    await showPaywall();
     const consent = activeLayer?.querySelector("#pixelle-terms");
     const recurring = activeLayer?.querySelector("#pixelle-recurring");
     if (consent && recurring) {
@@ -320,7 +326,7 @@
       if (error.status === 401) { showAuth(true); return; }
       const message = error.message || "Не удалось открыть оплату. Попробуйте позже.";
       if (!activeLayer) {
-        restorePaywallAfterCheckoutError(message);
+        await restorePaywallAfterCheckoutError(message);
         return;
       }
       frameError(message);
@@ -329,7 +335,8 @@
     }
   }
 
-  function showPaywall() {
+  function renderPaywall(status) {
+    if (activeLayer?.querySelector(".paywall-modal")) return;
     const card = document.createElement("section");
     card.className = "paywall-modal ym-hide-content";
     card.setAttribute("role", "dialog");
@@ -364,17 +371,33 @@
     consent.addEventListener("change", sync);
     recurring.addEventListener("change", sync);
     pay.addEventListener("click", () => checkout(pay, consent, recurring));
-    layer(card);
-    metrikaGoal(PIXELLE_METRIKA_TARGETS.paywallOpen);
-    request("/subscription/status").then((status) => {
-      if (status.trialAvailable !== false) return;
+    if (status.trialAvailable === false) {
       const title = card.querySelector("#pixelle-paywall-title");
       const price = card.querySelector(".paywall-price-row");
       const recurringText = card.querySelector("#pixelle-recurring")?.nextElementSibling;
       if (title) title.textContent = "Возобновите Pixelle Pro";
       if (price) price.innerHTML = "<strong>1 615 ₽</strong><span>на 5 дней</span>";
       if (recurringText) recurringText.textContent = "Согласен(-на) на списание 1 615 ₽ за 5 дней, затем 1 615 ₽ каждые 5 дней. После трёх неудачных попыток повтор — раз в месяц; успешная оплата возвращает периодичность 5 дней.";
-    }).catch((error) => { if (error.status === 401) showAuth(true); });
+    }
+    layer(card);
+    metrikaGoal(PIXELLE_METRIKA_TARGETS.paywallOpen);
+  }
+
+  async function showPaywall(knownStatus) {
+    let status = knownStatus;
+    if (!status) {
+      try {
+        status = await request("/subscription/status");
+      } catch (error) {
+        if (error.status === 401) showAuth(true);
+        return;
+      }
+    }
+    if (status.status !== "none") {
+      window.dispatchEvent(new CustomEvent("pixelle:subscription-active"));
+      return;
+    }
+    renderPaywall(status);
   }
 
   function showSupport() {
@@ -441,7 +464,7 @@
   async function showAccount() {
     try {
       const status = await request("/subscription/status");
-      if (!status || status.status === "none") { showPaywall(); return; }
+      if (!status || status.status === "none") { await showPaywall(status); return; }
       const receipts = await request("/subscription/receipts").catch(() => []);
       layer(accountCard(status, Array.isArray(receipts) ? receipts : []));
     } catch (error) {

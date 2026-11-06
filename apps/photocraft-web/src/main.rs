@@ -149,6 +149,27 @@ mod tests {
     }
 
     #[test]
+    fn paywall_display_goal_requires_an_authenticated_subscription_status() {
+        let commerce = include_str!("../commerce.js");
+        assert!(commerce.contains("activeLayer?.querySelector(\".px-commerce-auth\")"));
+        assert!(commerce.contains("returnToPaywall = returnToPaywall || nextPaywall"));
+        assert!(commerce.contains("activeLayer?.querySelector(\".paywall-modal\")"));
+        let (_, guarded_paywall) =
+            commerce.split_once("async function showPaywall(knownStatus)").expect("paywall entrypoint must authenticate before rendering");
+        let (guarded_paywall, _) = guarded_paywall.split_once("function showSupport()").expect("bounded paywall entrypoint");
+        let status_request = guarded_paywall.find("await request(\"/subscription/status\")").expect("authenticated subscription status request");
+        let render = guarded_paywall.find("renderPaywall(status)").expect("paywall render after authentication");
+        assert!(status_request < render, "paywall rendered before authentication was confirmed");
+        assert!(!guarded_paywall.contains("metrikaGoal(PIXELLE_METRIKA_TARGETS.paywallOpen)"));
+
+        let (_, rendered_paywall) = commerce.split_once("function renderPaywall(status)").expect("authenticated paywall renderer");
+        let (rendered_paywall, _) = rendered_paywall.split_once("async function showPaywall(knownStatus)").expect("bounded authenticated paywall renderer");
+        let layer_mount = rendered_paywall.find("layer(card)").expect("paywall layer mount");
+        let display_goal = rendered_paywall.find("metrikaGoal(PIXELLE_METRIKA_TARGETS.paywallOpen)").expect("paywall display goal");
+        assert!(layer_mount < display_goal, "paywall goal emitted before the paywall was mounted");
+    }
+
+    #[test]
     fn checkout_errors_remain_inside_the_scrollable_paywall_body() {
         let commerce = include_str!("../commerce.js");
         let styles = include_str!("../commerce.css");
