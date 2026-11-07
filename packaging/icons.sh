@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate every app icon from assets/app-icon/photocraft.svg (the canonical master).
+# Regenerate the native PhotoCraft icon family and the Pixelle browser icon family from their
+# canonical SVG masters under assets/app-icon/.
 #
 # Needs: resvg (brew install resvg / cargo install resvg). On macOS, iconutil also writes the
 # .icns. The outputs are committed, so packaging never needs these tools.
@@ -56,4 +57,19 @@ if command -v iconutil >/dev/null; then
 else
   echo "warning: iconutil not found (macOS only); photocraft.icns not regenerated" >&2
 fi
-echo "icons written to $DIR"
+
+# Pixelle browser and installable-web-app icons. The master is aligned to a 16-unit grid so the
+# favicon remains legible at its smallest committed size.
+PIXELLE_SVG="$DIR/pixelle.svg"
+PIXELLE_WEB="$ROOT/apps/photocraft-web"
+render "$PIXELLE_SVG" 180 "$PIXELLE_WEB/apple-touch-icon.png"
+render "$PIXELLE_SVG" 192 "$PIXELLE_WEB/pixelle-192.png"
+render "$PIXELLE_SVG" 512 "$PIXELLE_WEB/pixelle-512.png"
+PIXELLE_ICO_PNGS=()
+for s in 16 32 48 64; do
+  render "$PIXELLE_SVG" "$s" "$TMP/pixelle-ico-$s.png"
+  PIXELLE_ICO_PNGS+=("$TMP/pixelle-ico-$s.png")
+done
+(cd "$ROOT" && cargo run -q -p xtask -- ico "$PIXELLE_WEB/favicon.ico" "${PIXELLE_ICO_PNGS[@]}")
+
+echo "icons written to $DIR and $PIXELLE_WEB"

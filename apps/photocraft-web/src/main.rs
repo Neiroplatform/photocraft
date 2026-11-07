@@ -69,10 +69,18 @@ mod tests {
     fn page_uses_pixelle_title_and_first_party_svg_favicon() {
         let html = include_str!("../index.html");
         let favicon = include_str!("../../../assets/app-icon/pixelle.svg");
+        let manifest = include_str!("../site.webmanifest");
         assert!(html.contains("<title>Pixelle</title>"));
+        assert!(html.contains("<html lang=\"ru\">"));
+        assert!(html.contains("<meta name=\"theme-color\" content=\"#11151a\">"));
         assert!(html.contains("rel=\"icon\" type=\"image/svg+xml\" href=\"pixelle.svg\""));
+        assert!(html.contains("rel=\"manifest\" href=\"site.webmanifest\""));
         assert!(html.contains("data-trunk rel=\"copy-file\" href=\"../../assets/app-icon/pixelle.svg\""));
         assert!(favicon.contains("<title id=\"title\">Pixelle</title>"));
+        assert!(favicon.contains("shape-rendering=\"crispEdges\""));
+        assert!(manifest.contains("\"name\": \"Pixelle\""));
+        assert!(manifest.contains("\"src\": \"pixelle-192.png\""));
+        assert!(manifest.contains("\"src\": \"pixelle-512.png\""));
         for legacy in ["PhotoCraft", "ArtCraft", "Join us on Discord", "github.com/storytold"] {
             assert!(!html.contains(legacy), "legacy public branding remains: {legacy}");
         }
