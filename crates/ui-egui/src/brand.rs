@@ -21,13 +21,13 @@ pub fn paint_mark(ui: &Ui, r: Rect) {
     let unit = side / 16.0;
     let at = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(pos2(tile.left() + x * unit, tile.top() + y * unit), vec2(w * unit, h * unit));
 
-    ui.painter().rect_filled(tile, 3.25 * unit, TILE);
-    ui.painter().rect_filled(at(3.25, 2.75, 3.0, 10.5), 0.65 * unit, PIXEL_LIME);
-    ui.painter().rect_filled(at(5.75, 2.75, 4.75, 2.75), 0.65 * unit, PIXEL_LIME);
-    ui.painter().rect_filled(at(9.75, 4.5, 2.75, 3.75), 0.65 * unit, PIXEL_LIME);
-    ui.painter().rect_filled(at(5.75, 7.75, 4.75, 2.75), 0.65 * unit, PIXEL_LIME);
-    ui.painter().rect_filled(at(6.75, 5.5, 3.0, 2.25), 0.5 * unit, TILE);
-    ui.painter().rect_filled(at(10.75, 10.75, 2.0, 2.0), 0.45 * unit, PIXEL_LIGHT);
+    ui.painter().rect_filled(tile, 3.0 * unit, TILE);
+    ui.painter().rect_filled(at(3.0, 3.0, 3.0, 10.0), 0.0, PIXEL_LIME);
+    ui.painter().rect_filled(at(5.0, 3.0, 6.0, 3.0), 0.0, PIXEL_LIME);
+    ui.painter().rect_filled(at(10.0, 4.0, 3.0, 5.0), 0.0, PIXEL_LIME);
+    ui.painter().rect_filled(at(5.0, 8.0, 6.0, 3.0), 0.0, PIXEL_LIME);
+    ui.painter().rect_filled(at(6.0, 5.0, 4.0, 3.0), 0.0, TILE);
+    ui.painter().rect_filled(at(11.0, 11.0, 2.0, 2.0), 0.0, PIXEL_LIGHT);
     ui.ctx().data_mut(|d| d.insert_temp(rect_id(), tile));
 }
 

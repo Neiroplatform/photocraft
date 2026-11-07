@@ -1,11 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Pixelle</title>
-  <desc id="desc">A modular lime pixel P with a light cursor pixel on a dark rounded square.</desc>
-  <rect width="512" height="512" rx="104" fill="#11151a"/>
-  <rect x="104" y="88" width="96" height="336" rx="20" fill="#d7ff3f"/>
-  <rect x="184" y="88" width="152" height="88" rx="20" fill="#d7ff3f"/>
-  <rect x="312" y="144" width="88" height="120" rx="20" fill="#d7ff3f"/>
-  <rect x="184" y="248" width="152" height="88" rx="20" fill="#d7ff3f"/>
-  <rect x="216" y="176" width="96" height="72" rx="16" fill="#11151a"/>
-  <rect x="344" y="344" width="64" height="64" rx="14" fill="#f4f7ed"/>
+  <desc id="desc">A crisp lime pixel P with a light cursor pixel on a dark rounded square.</desc>
+  <rect width="512" height="512" rx="96" fill="#11151a"/>
+  <g shape-rendering="crispEdges">
+    <rect x="96" y="96" width="96" height="320" fill="#d7ff3f"/>
+    <rect x="160" y="96" width="192" height="96" fill="#d7ff3f"/>
+    <rect x="320" y="128" width="96" height="160" fill="#d7ff3f"/>
+    <rect x="160" y="256" width="192" height="96" fill="#d7ff3f"/>
+    <rect x="192" y="160" width="128" height="96" fill="#11151a"/>
+    <rect x="352" y="352" width="64" height="64" fill="#f4f7ed"/>
+  </g>
 </svg>

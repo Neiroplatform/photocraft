@@ -1,5 +1,13 @@
 # PhotoCraft app icon
 
+## Pixelle browser icon
+
+`pixelle.svg` is the canonical first-party Pixelle mark: a 16-unit pixel-grid `P`, lime on a
+graphite rounded tile, with one light cursor pixel. The browser package derives
+`apps/photocraft-web/favicon.ico`, `apple-touch-icon.png`, `pixelle-192.png` and
+`pixelle-512.png` from this master so tabs, saved shortcuts and installed web apps share the
+same geometry and colours.
+
 A **nine-tailed kitsune with a brow diamond**: an engraving portrait, seated, looking back at the
 viewer, in the Crafting Apps' owl-template framing (full-bleed field, head and body filling the
 tile, tails running off the edges).
