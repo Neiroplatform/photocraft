@@ -74,6 +74,7 @@ mod tests {
         assert!(html.contains("<html lang=\"ru\">"));
         assert!(html.contains("<meta name=\"theme-color\" content=\"#11151a\">"));
         assert!(html.contains("rel=\"icon\" type=\"image/svg+xml\" href=\"pixelle.svg\""));
+        assert!(html.contains("rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"pixelle-32.png\""));
         assert!(html.contains("rel=\"manifest\" href=\"site.webmanifest\""));
         assert!(html.contains("data-trunk rel=\"copy-file\" href=\"../../assets/app-icon/pixelle.svg\""));
         assert!(favicon.contains("<title id=\"title\">Pixelle</title>"));
@@ -84,6 +85,28 @@ mod tests {
         for legacy in ["PhotoCraft", "ArtCraft", "Join us on Discord", "github.com/storytold"] {
             assert!(!html.contains(legacy), "legacy public branding remains: {legacy}");
         }
+    }
+
+    #[test]
+    fn public_entry_is_a_russian_landing_before_auth_and_workspace() {
+        let editor = include_str!("../index.html");
+        let landing = include_str!("../landing.html");
+        let entry = include_str!("../landing.js");
+        for asset in ["landing.html", "landing.css", "landing.js", "pixelle-32.png"] {
+            assert!(editor.contains(&format!("data-trunk rel=\"copy-file\" href=\"{asset}\"")), "missing packaged landing asset: {asset}");
+        }
+        assert!(landing.contains("<html lang=\"ru\">"));
+        assert!(landing.contains("data-pixelle-surface=\"landing\""));
+        assert!(landing.contains("data-pixelle-start"));
+        assert!(landing.contains("Фоторедактор в браузере"));
+        assert!(landing.contains("Открыть Pixelle"));
+        assert!(landing.contains("3 дня за 9 ₽ · затем 1 615 ₽ за 5 дней"));
+        assert!(landing.contains("<script src=\"landing.js\" defer></script>"));
+        assert!(landing.contains("<script src=\"commerce.js\" defer></script>"));
+        assert!(entry.contains("await commerce.startAccess()"));
+        assert!(entry.contains("window.addEventListener(\"pixelle:subscription-active\""));
+        assert!(entry.contains("new URL(\"workspace.html\", location.href)"));
+        assert!(entry.contains("location.assign(target.href)"));
     }
 
     #[test]
@@ -127,6 +150,8 @@ mod tests {
         assert!(web.contains("open_commerce_method(\"showAuth\", Some(true))"));
         assert!(web.contains("403 => open_commerce_paywall()"));
         assert!(commerce.contains("window.dispatchEvent(new CustomEvent(\"pixelle:subscription-active\"))"));
+        assert!(commerce.contains("async function startAccess()"));
+        assert!(commerce.contains("window.PixelleCommerce = { startAccess, showPaywall, showSupport, showAuth, showAccount }"));
         assert!(!commerce.contains("location.href ="), "auth/payment must not navigate away from the open editor session");
     }
 

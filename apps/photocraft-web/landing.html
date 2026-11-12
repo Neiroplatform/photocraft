@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11151a">
+  <meta name="description" content="Pixelle — полноценный онлайн-фоторедактор с PSD, слоями, точным выделением и ИИ-инструментами.">
+  <title>Pixelle — онлайн-фоторедактор</title>
+  <link rel="icon" type="image/svg+xml" href="pixelle.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="pixelle-32.png">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="stylesheet" href="landing.css">
+  <link rel="stylesheet" href="commerce.css">
+  <link rel="dns-prefetch" href="https://mc.yandex.ru">
+  <link rel="preconnect" href="https://mc.yandex.ru" crossorigin>
+  <link rel="preconnect" href="https://auth.neiro-platform.ru" crossorigin>
+  <script src="landing.js" defer></script>
+  <script src="commerce.js" defer></script>
+  <!-- Yandex.Metrika counter -->
+  <script>
+    (function(m,e,t,r,i,k,a){
+      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window,document,"script","https://mc.yandex.ru/metrika/tag.js?id=113889832","ym");
+    ym(113889832,"init",{ssr:true,webvisor:true,clickmap:true,ecommerce:"dataLayer",referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+  </script>
+  <!-- /Yandex.Metrika counter -->
+</head>
+<body data-pixelle-surface="landing">
+  <noscript><div><img src="https://mc.yandex.ru/watch/113889832" style="position:absolute;left:-9999px" alt=""></div></noscript>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Pixelle, главная">
+      <img src="pixelle.svg" width="30" height="30" alt="">
+      <span>Pixelle</span>
+    </a>
+    <nav class="site-nav" aria-label="Основная навигация">
+      <a href="#capabilities">Возможности</a>
+      <a href="#how-it-works">Как работает</a>
+      <button type="button" data-pixelle-support>Поддержка</button>
+    </nav>
+    <button class="header-access" type="button" data-pixelle-start>Войти</button>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span aria-hidden="true"></span>Фоторедактор в браузере</p>
+        <h1 id="hero-title">Вся работа с изображением — <em>в одном окне.</em></h1>
+        <p class="hero-lead">Открывайте PSD и фотографии, работайте со слоями, точно выделяйте объекты и используйте ИИ только там, где он нужен.</p>
+        <div class="hero-actions">
+          <button class="primary-action" type="button" data-pixelle-start>
+            <span>Открыть Pixelle</span><span aria-hidden="true">↗</span>
+          </button>
+          <span class="trial-note">3 дня за 9 ₽ · затем 1 615 ₽ за 5 дней</span>
+        </div>
+        <p class="entry-error" data-pixelle-entry-error role="alert" hidden></p>
+        <ul class="hero-facts" aria-label="Ключевые возможности">
+          <li><strong>PSD</strong><span>слои и маски</span></li>
+          <li><strong>AI</strong><span>локально и в облаке</span></li>
+          <li><strong>100%</strong><span>в браузере</span></li>
+        </ul>
+      </div>
+
+      <div class="product-stage" aria-label="Предпросмотр рабочей области Pixelle">
+        <div class="stage-mark" aria-hidden="true">01 / РАБОЧАЯ ОБЛАСТЬ</div>
+        <div class="editor-frame">
+          <div class="editor-topbar"><span class="mini-logo">P</span><span>Файл</span><span>Редактирование</span><span>Слой</span><span>Фильтр</span><b>Pixelle</b></div>
+          <div class="editor-options"><span></span><i></i><i></i><small>Выделить объект</small></div>
+          <div class="editor-body">
+            <div class="editor-tools" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="editor-canvas">
+              <svg viewBox="0 0 720 470" role="img" aria-label="Макет редактируемой фотографии">
+                <rect width="720" height="470" fill="#d8d2c5"/>
+                <rect y="328" width="720" height="142" fill="#8b674f"/>
+                <rect x="48" y="52" width="210" height="238" fill="#b7cbd0"/>
+                <rect x="61" y="65" width="184" height="212" fill="#8faab2"/>
+                <path d="M61 216L122 145l48 52 36-38 39 57v61H61z" fill="#55737a"/>
+                <rect x="498" y="56" width="150" height="218" fill="#efe9dc"/>
+                <rect x="516" y="76" width="114" height="154" fill="#3d4548"/>
+                <circle cx="573" cy="142" r="36" fill="#c9d56d"/>
+                <path d="M573 110v64M541 142h64" stroke="#3d4548" stroke-width="6"/>
+                <ellipse cx="366" cy="185" rx="69" ry="78" fill="#c5a184"/>
+                <path d="M298 175c0-75 34-117 75-117 46 0 74 39 67 115-24-15-51-25-77-25-25 0-46 9-65 27z" fill="#343638"/>
+                <path d="M252 407c13-123 52-178 116-178 67 0 111 57 124 178z" fill="#24292c"/>
+                <path d="M337 242c12 14 49 15 62 0v66h-62z" fill="#b98e72"/>
+                <rect x="285" y="377" width="173" height="30" rx="4" fill="#15191b"/>
+                <path d="M285 392H161" stroke="#1b2022" stroke-width="18"/>
+                <circle cx="160" cy="392" r="25" fill="#171b1d"/>
+                <path d="M291 181c-3-74 34-130 81-130 55 0 84 48 73 133M245 410c8-128 52-194 123-194 74 0 120 66 131 194" fill="none" stroke="#b9f227" stroke-width="3" stroke-dasharray="8 7"/>
+                <g fill="#b9f227"><rect x="287" y="176" width="8" height="8"/><rect x="441" y="179" width="8" height="8"/><rect x="241" y="406" width="8" height="8"/><rect x="495" y="406" width="8" height="8"/></g>
+              </svg>
+              <div class="canvas-tag"><b>Объект выделен</b><span>Края уточнены локально</span></div>
+            </div>
+            <aside class="editor-panels">
+              <div class="panel-title"><b>Слои</b><span>Каналы</span></div>
+              <div class="layer-row active"><i></i><span>Объект</span><small>100%</small></div>
+              <div class="layer-row"><i></i><span>Цвет</span><small>100%</small></div>
+              <div class="layer-row"><i></i><span>Фон</span><small>●</small></div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow" id="how-it-works" aria-labelledby="workflow-title">
+      <div class="section-heading"><p>02 / ПРОЦЕСС</p><h2 id="workflow-title">От файла до результа без лишних шагов</h2></div>
+      <ol class="workflow-list">
+        <li><span>01</span><div><h3>Откройте</h3><p>Загрузите фотографию, PSD или вставьте изображение из буфера.</p></div></li>
+        <li><span>02</span><div><h3>Отредактируйте</h3><p>Слои, маски, кисти, цвет, текст, выделение объектов и генеративные действия.</p></div></li>
+        <li><span>03</span><div><h3>Скачайте</h3><p>Экспортируйте готовую работу или сохраните проект со слоями.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="capabilities" id="capabilities" aria-labelledby="capabilities-title">
+      <div class="section-heading"><p>03 / ВОЗМОЖНОСТИ</p><h2 id="capabilities-title">Профессиональные инструменты. Понятный вход.</h2></div>
+      <div class="capability-grid">
+        <article><span>PSD</span><h3>Слои без упрощений</h3><p>Открывайте PSD и PSB, работайте со слоями, масками и режимами наложения.</p></article>
+        <article><span>OBJ</span><h3>Точное выделение</h3><p>Нажмите на объект, уточните края и соберите сложную область из нескольких частей.</p></article>
+        <article><span>AI</span><h3>ИИ по задаче</h3><p>Удаляйте и заменяйте фон, расширяйте холст и редактируйте выбранную область текстом.</p></article>
+        <article><span>LOC</span><h3>Локальная обработка</h3><p>Обычные инструменты работают в браузере. Пиксели отправляются в облако только для явно выбранной ИИ-операции.</p></article>
+      </div>
+    </section>
+
+    <section class="final-cta" aria-labelledby="final-title">
+      <p>04 / СТАРТ</p>
+      <h2 id="final-title">Откройте изображение.<br>Остальное — в Pixelle.</h2>
+      <button class="primary-action" type="button" data-pixelle-start><span>Начать редактировать</span><span aria-hidden="true">↗</span></button>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div><img src="pixelle.svg" width="24" height="24" alt=""><b>Pixelle</b><span>© 2026 ООО «ЛАЙКВИАР»</span></div>
+    <nav aria-label="Правовая и сервисная информация"><button type="button" data-pixelle-support>Поддержка</button><a href="/offer">Оферта</a><a href="/rules">Правила</a><a href="/privacy">Конфиденциальность</a></nav>
+  </footer>
+</body>
+</html>

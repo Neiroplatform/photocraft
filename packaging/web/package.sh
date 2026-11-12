@@ -62,8 +62,10 @@ fi
 SITE="$ROOT/dist/web"
 [ -f "$SITE/index.html" ] || { echo "error: $SITE/index.html missing; run without --skip-build" >&2; exit 1; }
 
-# Keep the complete editor's public path explicit alongside the task pages.
-cp "$SITE/index.html" "$SITE/patchy.html"
+# The public entry stays light and opens registration/payment first. The full
+# WASM editor remains a separate immutable workspace entry.
+cp "$SITE/index.html" "$SITE/workspace.html"
+cp "$SITE/landing.html" "$SITE/patchy.html"
 
 # Every Quick Tool has a stable standalone URL but loads the same exact WASM
 # runtime. The runtime chooses its closed task route from the packaged file name.
