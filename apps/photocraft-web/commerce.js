@@ -474,6 +474,7 @@
   }
 
   function addButtons() {
+    if (document.body?.dataset.pixelleSurface === "landing") return;
     if (document.getElementById("pixelle-pro-button")) return;
     const pro = document.createElement("button");
     pro.id = "pixelle-pro-button";
@@ -491,7 +492,12 @@
     document.body.append(pro, support);
   }
 
-  window.PixelleCommerce = { showPaywall, showSupport, showAuth, showAccount };
+  async function startAccess() {
+    await showPaywall();
+  }
+
+  window.PixelleCommerce = { startAccess, showPaywall, showSupport, showAuth, showAccount };
   bindMetrikaClientId();
+  window.addEventListener("pixelle:subscription-active", () => setTimeout(addButtons, 0));
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addButtons); else addButtons();
 })();
