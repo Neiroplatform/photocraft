@@ -100,7 +100,8 @@ mod tests {
         assert!(landing.contains("data-pixelle-start"));
         assert!(landing.contains("Фоторедактор в браузере"));
         assert!(landing.contains("Открыть Pixelle"));
-        assert!(landing.contains("3 дня за 9 ₽ · затем 1 615 ₽ за 5 дней"));
+        assert!(!landing.contains("3 дня за 9 ₽ · затем 1 615 ₽ за 5 дней"));
+        assert!(!landing.contains("class=\"trial-note\""));
         assert!(landing.contains("<script src=\"landing.js\" defer></script>"));
         assert!(landing.contains("<script src=\"commerce.js\" defer></script>"));
         assert!(entry.contains("await commerce.startAccess()"));
