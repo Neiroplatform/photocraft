@@ -11,6 +11,8 @@
   let activeLayer = null;
   let previousFocus = null;
   let returnToPaywall = false;
+  let sessionVersion = 0;
+  let sessionRefresh = null;
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   const receiptUrl = (value) => {
     try { const url = new URL(String(value)); return url.protocol === "https:" ? escapeHtml(url.href) : ""; }
@@ -71,7 +73,7 @@
 
   captureMarketingCampaign();
 
-  async function request(path, options = {}) {
+  async function sendRequest(path, options = {}) {
     const response = await fetch(`${API}${path}`, {
       credentials: "include",
       ...options,
@@ -84,6 +86,27 @@
       throw error;
     }
     return body;
+  }
+
+  async function request(path, options = {}) {
+    const startedVersion = sessionVersion;
+    try {
+      return await sendRequest(path, options);
+    } catch (error) {
+      // A short-lived access cookie can expire during checkout or between visits.
+      // Refresh only rejected product requests; one-use auth exchanges are never
+      // replayed. Concurrent callers must share the rotating refresh cookie.
+      if (error.status !== 401 || path.startsWith("/auth/")) throw error;
+      if (startedVersion === sessionVersion) {
+        if (!sessionRefresh) {
+          sessionRefresh = sendRequest("/auth/refresh", { method: "POST" })
+            .then(() => { sessionVersion += 1; })
+            .finally(() => { sessionRefresh = null; });
+        }
+        await sessionRefresh;
+      }
+      return sendRequest(path, options);
+    }
   }
 
   function closeLayer() {
@@ -389,8 +412,8 @@
       try {
         status = await request("/subscription/status");
       } catch (error) {
-        if (error.status === 401) showAuth(true);
-        return;
+        if (error.status === 401) { showAuth(true); return; }
+        throw error;
       }
     }
     if (status.status !== "none") {
