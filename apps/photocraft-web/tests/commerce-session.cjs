@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 // Execute the shipped shell, including its landing redirect, without a payment
 // provider or real account. A dialog request is a failure in the paid paths.
-function shell(respond) {
+function shell(respond, surface = "landing") {
   const requests = [];
   const navigations = [];
   const listeners = new Map();
@@ -28,7 +28,8 @@ function shell(respond) {
   };
   const document = {
     readyState: "complete",
-    body: { dataset: { pixelleSurface: "landing" } },
+    body: { dataset: { pixelleSurface: surface } },
+    getElementById: () => ({}),
     querySelectorAll: () => [],
     querySelector: () => null,
     createElement: () => { throw new Error("Unexpected authentication or payment dialog"); },
@@ -180,5 +181,18 @@ test("checkout finalization after 401 preserves the order and body without creat
     assert.equal(request.options.body, "{}");
     assert.equal(request.options.headers["x-request-id"], "exact-finalization");
     assert.equal(request.options.headers["content-type"], "application/json");
+  }
+});
+
+test("fire-and-forget workspace paywall entry settles during temporary access failures", async () => {
+  for (const respond of [
+    () => ({ status: 503, body: { message: "temporarily unavailable" } }),
+    () => { throw new Error("offline"); },
+    (path) => ({ status: path === "/auth/refresh" ? 503 : 401 }),
+  ]) {
+    const fixture = shell(respond, "workspace");
+    await fixture.commerce.showPaywall();
+    assert.equal(fixture.navigations.length, 0);
+    assert.equal(fixture.requests.some(({ path }) => path === "/subscription/create"), false);
   }
 });

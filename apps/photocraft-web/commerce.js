@@ -413,7 +413,11 @@
         status = await request("/subscription/status");
       } catch (error) {
         if (error.status === 401) { showAuth(true); return; }
-        throw error;
+        // The landing awaits this entrypoint and renders its existing error
+        // surface. The editor also calls it without awaiting the Promise.
+        if (document.body?.dataset.pixelleSurface === "landing") throw error;
+        frameError(error.message || "Не удалось проверить доступ к Pixelle. Попробуйте позже.");
+        return;
       }
     }
     if (status.status !== "none") {
